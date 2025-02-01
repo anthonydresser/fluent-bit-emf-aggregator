@@ -1,0 +1,22 @@
+services:
+  fluent-bit:
+    build: fluent-bit-emf
+    volumes:
+      - ./output:/tmp/emf_test
+    ports:
+      - "5170:5170"
+    environment:
+      - FLUENT_BIT_PLUGIN_DIR=/fluent-bit/plugins
+      - FLB_LOG_LEVEL=debug
+
+  emf-generator:
+    build: test-bed
+    environment:
+      - FLUENT_HOST=fluent-bit
+      - PORT=5170
+      - RPS=100
+      - RETRIES=30
+      - RETRY_INTERVAL=2s
+
+volumes:
+  output:

@@ -1,0 +1,24 @@
+FROM ubuntu:20.04 as builder
+
+# Install Go 1.21
+RUN apt-get update && apt-get install -y wget git gcc build-essential
+RUN wget https://go.dev/dl/go1.20.13.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.20.13.linux-amd64.tar.gz
+ENV PATH=$PATH:/usr/local/go/bin
+
+WORKDIR /build
+COPY main.go .
+RUN go mod init emf_aggregator
+RUN go get github.com/fluent/fluent-bit-go/output
+RUN CGO_ENABLED=1 GOOS=linux \
+    go build -buildmode=c-shared \
+    -ldflags '-w' \
+    -o out_emf_aggregator.so .
+
+FROM fluent/fluent-bit:1.9
+
+COPY --from=builder /build/out_emf_aggregator.so /fluent-bit/plugins/
+COPY fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
+COPY plugins.conf /fluent-bit/etc/plugins.conf
+
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf", "-v"]
