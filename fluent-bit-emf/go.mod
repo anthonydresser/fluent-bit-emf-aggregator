@@ -1,6 +1,6 @@
-module github.com/anthonydresser/fluent-bit-em
+module github.com/anthonydresser/fluent-bit-emf
 
-go 1.23.2
+go 1.20
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.43.12

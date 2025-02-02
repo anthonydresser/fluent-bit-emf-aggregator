@@ -12,17 +12,57 @@ import (
 )
 
 type EMFMetric struct {
-	Version    string                 `json:"_aws"`
-	Timestamp  time.Time              `json:"timestamp"`
-	Metadata   map[string]interface{} `json:"metadata"`
-	Dimensions map[string]string      `json:"dimensions"`
-	Metrics    []MetricDefinition     `json:"metrics"`
-	Values     map[string]float64     `json:"values"`
+	AWS       AWSMetadata `json:"_aws"`
+	Latency   MetricValue `json:"Latency"`
+	Fault     int         `json:"Fault"`
+	Size      int         `json:"Size"`
+	Function  MetricValue `json:"Function:Called"`
+	Service   string      `json:"ServiceName"`
+	Operation string      `json:"Operation"`
+	Client    string      `json:"Client"`
+	RequestID string      `json:"RequestId"`
+}
+
+type AWSMetadata struct {
+	Timestamp         int64              `json:"Timestamp"`
+	CloudWatchMetrics []MetricDefinition `json:"CloudWatchMetrics"`
 }
 
 type MetricDefinition struct {
-	Name string `json:"name"`
-	Unit string `json:"unit"`
+	Namespace  string     `json:"Namespace"`
+	Dimensions [][]string `json:"Dimensions"`
+	Metrics    []Metric   `json:"Metrics"`
+}
+
+type Metric struct {
+	Name string `json:"Name"`
+	Unit string `json:"Unit"`
+}
+
+type MetricValue struct {
+	Values []float64 `json:"Values"`
+	Counts []int     `json:"Counts"`
+	Min    float64   `json:"Min"`
+	Max    float64   `json:"Max"`
+	Sum    float64   `json:"Sum"`
+	Count  int       `json:"Count"`
+}
+
+func generateRequestID() string {
+	return fmt.Sprintf("%x-%x-%x-%x",
+		rand.Int31(), rand.Int31(),
+		rand.Int31(), rand.Int31())
+}
+
+func createMetricValue(value float64) MetricValue {
+	return MetricValue{
+		Values: []float64{value},
+		Counts: []int{1},
+		Min:    value,
+		Max:    value,
+		Sum:    value,
+		Count:  1,
+	}
 }
 
 func main() {
@@ -59,11 +99,30 @@ func main() {
 	defer conn.Close()
 
 	// Prepare static test data
-	services := []string{"api", "web", "auth", "db"}
-	environments := []string{"prod", "staging", "dev"}
-	regions := []string{"us-east-1", "us-west-2", "eu-west-1"}
-	metricNames := []string{"latency", "cpu_usage", "memory_usage", "request_count"}
-	metricUnits := []string{"milliseconds", "percent", "bytes", "count"}
+	services := []string{"ServiceA", "ServiceB", "ServiceC"}
+	operations := []string{"GetItem", "PutItem", "Query", "Scan"}
+	clients := []string{"ClientA", "ClientB", "ClientC"}
+
+	// Define the metric definition template
+	metricDef := MetricDefinition{
+		Namespace: "MyService/namespace",
+		Dimensions: [][]string{
+			{},
+			{"ServiceName"},
+			{"Operation"},
+			{"ServiceName", "Operation"},
+			{"Client"},
+			{"ServiceName", "Client"},
+			{"Operation", "Client"},
+			{"ServiceName", "Operation", "Client"},
+		},
+		Metrics: []Metric{
+			{Name: "Latency", Unit: "Milliseconds"},
+			{Name: "Fault", Unit: "Count"},
+			{Name: "Size", Unit: "Bytes"},
+			{Name: "Function:Called", Unit: "Count"},
+		},
+	}
 
 	ticker := time.NewTicker(time.Second / time.Duration(*recordsPerSecond))
 	defer ticker.Stop()
@@ -71,46 +130,25 @@ func main() {
 	log.Printf("Starting to generate %d EMF records per second...", *recordsPerSecond)
 
 	for range ticker.C {
-		// Generate random dimensions
-		service := services[rand.Intn(len(services))]
-		env := environments[rand.Intn(len(environments))]
-		region := regions[rand.Intn(len(regions))]
+		// Generate random values
+		latency := rand.Float64() * 1000        // 0-1000ms
+		size := rand.Intn(1000)                 // 0-1000 bytes
+		fault := rand.Intn(2)                   // 0 or 1
+		functionCalled := float64(rand.Intn(2)) // 0 or 1
 
-		// Create EMF record
 		emf := EMFMetric{
-			Version:   "0",
-			Timestamp: time.Now(),
-			Metadata: map[string]interface{}{
-				"service_info": map[string]string{
-					"version": "1.0.0",
-				},
+			AWS: AWSMetadata{
+				Timestamp:         time.Now().UnixMilli(),
+				CloudWatchMetrics: []MetricDefinition{metricDef},
 			},
-			Dimensions: map[string]string{
-				"service":     service,
-				"environment": env,
-				"region":      region,
-			},
-			Metrics: make([]MetricDefinition, len(metricNames)),
-			Values:  make(map[string]float64),
-		}
-
-		// Add metrics and values
-		for i, name := range metricNames {
-			emf.Metrics[i] = MetricDefinition{
-				Name: name,
-				Unit: metricUnits[i],
-			}
-			// Generate random values appropriate for each metric
-			switch name {
-			case "latency":
-				emf.Values[name] = rand.Float64() * 100 // 0-100ms
-			case "cpu_usage":
-				emf.Values[name] = rand.Float64() * 100 // 0-100%
-			case "memory_usage":
-				emf.Values[name] = rand.Float64() * 1024 * 1024 * 1024 // 0-1GB
-			case "request_count":
-				emf.Values[name] = float64(rand.Intn(1000)) // 0-1000 requests
-			}
+			Latency:   createMetricValue(latency),
+			Fault:     fault,
+			Size:      size,
+			Function:  createMetricValue(functionCalled),
+			Service:   services[rand.Intn(len(services))],
+			Operation: operations[rand.Intn(len(operations))],
+			Client:    clients[rand.Intn(len(clients))],
+			RequestID: generateRequestID(),
 		}
 
 		// Marshal to JSON and write to socket
@@ -127,7 +165,7 @@ func main() {
 		if err != nil {
 			log.Printf("Failed to write to socket: %v", err)
 			// Try to reconnect
-			if conn, err = net.Dial("tcp", fmt.Sprintf("localhost:%d", *port)); err != nil {
+			if conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", *host, *port)); err != nil {
 				log.Printf("Failed to reconnect: %v", err)
 			}
 		}

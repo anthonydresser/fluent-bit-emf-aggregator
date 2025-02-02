@@ -1,0 +1,6 @@
+{
+    "go.delveConfig": {
+        "debugAdapter": "dlv-dap",
+        "showGlobalVariables": true
+    }
+}

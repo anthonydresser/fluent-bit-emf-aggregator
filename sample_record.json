@@ -1,0 +1,87 @@
+{
+    "_aws": {
+        "Timestamp": 1738022579723,
+        "CloudWatchMetrics": [
+            {
+                "Namespace": "MyService/namespace",
+                "Dimnesions": [
+                    [],
+                    [
+                        "ServiceName"
+                    ],
+                    [
+                        "Operation"
+                    ],
+                    [
+                        "ServiceName",
+                        "Operation"
+                    ],
+                    [
+                        "Client"
+                    ],
+                    [
+                        "ServiceName",
+                        "Client"
+                    ],
+                    [
+                        "Operation",
+                        "Client"
+                    ],
+                    [
+                        "ServiceName",
+                        "Operation",
+                        "Client"
+                    ]
+                ],
+                "Metrics": [
+                    {
+                        "Name": "Latency",
+                        "Unit": "Milliseconds"
+                    },
+                    {
+                        "Name": "Fault",
+                        "Unit": "Count"
+                    },
+                    {
+                        "Name": "Size",
+                        "Unit": "Bytes"
+                    },
+                    {
+                        "Name": "Function:Called",
+                        "Unit": "Count"
+                    }
+                ]
+            }
+        ]
+    },
+    "Latency": {
+        "Values": [
+            258
+        ],
+        "Counts": [
+            1
+        ],
+        "Min": 258,
+        "Max": 258,
+        "Sum": 258,
+        "Count": 1
+    },
+    "Fault": 0,
+    "Size": 198,
+    "Function:Called": {
+        "Values": [
+            0
+        ],
+        "Counts": [
+            1
+        ],
+        "Min": 0,
+        "Max": 0,
+        "Sum": 0,
+        "Count": 1
+    },
+    "ServiceName": "MyService",
+    "Operation": "MyOperation",
+    "Client": "MyClient",
+    "RequestId": "545648-654564-56456-5648456a4sdasdasd"
+}

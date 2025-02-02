@@ -10,6 +10,7 @@ WORKDIR /build
 COPY main.go .
 RUN go mod init emf_aggregator
 RUN go get github.com/fluent/fluent-bit-go/output
+
 RUN CGO_ENABLED=1 GOOS=linux \
     go build -buildmode=c-shared \
     -ldflags '-w' \
@@ -21,4 +22,4 @@ COPY --from=builder /build/out_emf_aggregator.so /fluent-bit/plugins/
 COPY fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
 COPY plugins.conf /fluent-bit/etc/plugins.conf
 
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf", "-v"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
