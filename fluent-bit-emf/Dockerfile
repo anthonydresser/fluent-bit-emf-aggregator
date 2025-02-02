@@ -7,9 +7,7 @@ RUN wget https://go.dev/dl/go1.20.13.linux-amd64.tar.gz && \
 ENV PATH=$PATH:/usr/local/go/bin
 
 WORKDIR /build
-COPY main.go .
-RUN go mod init emf_aggregator
-RUN go get github.com/fluent/fluent-bit-go/output
+COPY . .
 
 RUN CGO_ENABLED=1 GOOS=linux \
     go build -buildmode=c-shared \
