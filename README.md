@@ -10,7 +10,6 @@ Cloudwatch ingestion is expensive. Emitting emf logs per request into Cloudwatch
 
 This is a PoC to unlock that functionality. The expectation is your application will emit request level emf logs into your fluentbit environment. You can then direct that input to 2 different outputs: 1 being this plugin which will aggregate it then push those into cloudwatch to be converted to custom metrics; the other being an output stream that takes those request level logs and pushes them into some other environment that you can then query at the request level.
 
-
 ## Caveats
 
 1. The goal of this usecase is to reduce the size of the logs being ingested into CloudWatch, and so, to push for that goal, this code stripes out any non-relevant keys in the emf; only attributes necessary for the emf format and references by the dimensions on the metrics is maintained.
@@ -19,7 +18,7 @@ This is a PoC to unlock that functionality. The expectation is your application 
 
 3. This will end up outputting multiple emf stream per aggregation period due to the format constraints of emf. If your metrics depend on a dimension called `api` and your application is emitting emf records with different values for the `api` dimension, there is no way to merge these together, therefore you will get a separate output stream for each value of `api` emitted.
 
-4. Due to a weird bug between golang 1.21 and fluent-bit (see https://github.com/golang/go/issues/62440), I am forced to use golang 1.20 instead. Think always means we are forced to use an older version of the cloudwatch logs client, 1.36.0.
+4. Due to a weird bug between golang 1.21 and fluent-bit (see https://github.com/golang/go/issues/62440), I am forced to use golang 1.20 instead. This always means I am forced to use an older version of the cloudwatch logs client, 1.36.0.
 
 ## Project structure
 
@@ -30,6 +29,8 @@ This fluent-bit-test folder and the toplevel Dockerfile.fluent-bit setups a samp
 In order to test this and get confirmation of behavior as well as "compression" stats, a test-bed docker image is available under `test-bed` which provides a basic go program that just emits random emf formatted logs.
 
 At the top level is a `compose.yml` file, which will launch the test-bed and the example fluentbit configuration, with the aggregator plugin. It emits logs detailing how much of the input is being compressed by the plugin, ex.
+
+`mock-cloudwatch-server` contains a mock cloudwatch logs server implementation in order to test the integration with cloudwatch without actually having to hit cloudwatch apis. This is launched by default in the docker compose file. In order to switch between it and logging to disk, update the [test fluent-bit-config](https://github.com/anthonydresser/fluent-bit-emf-aggregator/blob/main/fluent-bit-test/fluent-bit.conf#L13).
 
 ``` bash
 fluent-bit-1     | [info] [emf-aggregator] Compressed 1041505 bytes into 64610 bytes or 93%; and 1754 Records into 36 or 97%
