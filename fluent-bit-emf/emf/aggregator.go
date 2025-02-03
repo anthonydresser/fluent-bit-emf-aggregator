@@ -15,7 +15,7 @@ import (
 )
 
 type Stats struct {
-	InputLength  int64 `json:"InputLength"`
+	InputLength  int64
 	InputRecords int64
 }
 
@@ -32,7 +32,7 @@ type EMFAggregator struct {
 	Stats           Stats
 
 	// flushing helpers
-	flusher func(map[string]interface{}) (int64, error)
+	flusher func([]map[string]interface{}) (int64, int64, error)
 	// file flushing
 	file_encoder *json.Encoder
 	file         *os.File
@@ -217,13 +217,13 @@ func (a *EMFAggregator) Flush() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	outputSize := int64(0)
-	outputCount := int64(0)
+	outputEvents := make([]map[string]interface{}, 0)
 
 	for dimHash, metricMap := range a.metrics {
 		// Get the metadata for this dimension set
 		metadata, exists := a.metadataStore[dimHash]
 		if !exists {
+			fmt.Printf("[warn] [emf-aggregator] No metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -231,6 +231,7 @@ func (a *EMFAggregator) Flush() error {
 		awsMetadata, hasAWS := metadata["_aws"].(*AWSMetadata)
 		// Skip if no AWS metadata is available
 		if !hasAWS {
+			fmt.Printf("[warn] [emf-aggregator] No AWS metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -260,19 +261,19 @@ func (a *EMFAggregator) Flush() error {
 			}
 		}
 
-		if size, err := a.flusher(outputMap); err == nil {
-			outputSize += size
-		} else {
-			return fmt.Errorf("failed to flush %v", err)
-		}
-
-		outputCount++
+		outputEvents = append(outputEvents, outputMap)
 	}
 
-	size_percentage := int(float64(a.Stats.InputLength-outputSize) / float64(a.Stats.InputLength) * 100)
-	count_percentage := int(float64(a.Stats.InputRecords-outputCount) / float64(a.Stats.InputRecords) * 100)
+	size, count, err := a.flusher(outputEvents)
 
-	fmt.Printf("[info] [emf-aggregator] Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, outputSize, size_percentage, a.Stats.InputRecords, outputCount, count_percentage)
+	if err != nil {
+		return fmt.Errorf("error flushing: %w", err)
+	}
+
+	size_percentage := int(float64(a.Stats.InputLength-size) / float64(a.Stats.InputLength) * 100)
+	count_percentage := int(float64(a.Stats.InputRecords-count) / float64(a.Stats.InputRecords) * 100)
+
+	fmt.Printf("[info] [emf-aggregator] Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[string]map[string]*AggregatedValue)

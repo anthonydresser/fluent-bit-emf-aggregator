@@ -23,7 +23,9 @@ This is a PoC to unlock that functionality. The expectation is your application 
 
 ## Project structure
 
-This project contains the PoC for the fluentbit code written in `golang` under the `fluent-bit-emf` folder. This also contains a docker definition as a sample usage that launches fluent-bit 1.19 (the target for this PoC) with a basic configuration and this plugin running in.
+This project contains the PoC for the fluentbit plugin written in `golang` under the `fluent-bit-emf` folder.
+
+This fluent-bit-test folder and the toplevel Dockerfile.fluent-bit setups a sample usage that launches fluent-bit 1.19 (the target for this PoC) with a basic configuration and this plugin running in.
 
 In order to test this and get confirmation of behavior as well as "compression" stats, a test-bed docker image is available under `test-bed` which provides a basic go program that just emits random emf formatted logs.
 

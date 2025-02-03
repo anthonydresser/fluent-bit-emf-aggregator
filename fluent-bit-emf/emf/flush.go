@@ -36,21 +36,32 @@ func (a *EMFAggregator) init_file_flush(outputPath string) error {
 	return nil
 }
 
-func (a *EMFAggregator) flush_file(data map[string]interface{}) (int64, error) {
+func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int64, int64, error) {
 	// Encode the map
 	size_prior, err := a.file.Stat()
 	if err != nil {
-		return 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
+		return 0, 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
 	}
-	if err := a.file_encoder.Encode(data); err != nil {
-		return 0, fmt.Errorf("failed to write to file %s: %v", a.file.Name(), err)
+	// we have to encode these one at a time so they are individual events rather than a json array
+	count := int64(0)
+	for _, event := range events {
+		if err := a.file_encoder.Encode(event); err != nil {
+			return 0, 0, fmt.Errorf("failed to write to file %s: %v", a.file.Name(), err)
+		}
+		count++
 	}
-	size_after, err := a.file.Stat()
+	err = a.file.Sync()
+
 	if err != nil {
-		return 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
+		return 0, 0, fmt.Errorf("failed to sync file %s: %v", a.file.Name(), err)
 	}
 
-	return size_after.Size() - size_prior.Size(), nil
+	size_after, err := a.file.Stat()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
+	}
+
+	return size_after.Size() - size_prior.Size(), count, nil
 }
 
 func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName string, endpoint *string) error {
@@ -68,25 +79,36 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 	return nil
 }
 
-func (a *EMFAggregator) flush_cloudwatch(data map[string]interface{}) (int64, error) {
+func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64, int64, error) {
 	timestamp := time.Now().UnixMilli()
-	message, err := json.Marshal(data)
-	if err != nil {
-		return 0, fmt.Errorf("failed to marshal data: %v", err)
+	messages := make([]types.InputLogEvent, len(events))
+	count := int64(0)
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		marshalled, err := json.Marshal(event)
+		if err != nil {
+			return 0, 0, fmt.Errorf("failed to marshal event: %v", err)
+		}
+		marshalledString := string(marshalled)
+		messages = append(messages, types.InputLogEvent{
+			Timestamp: &timestamp,
+			Message:   &marshalledString,
+		})
+		count++
 	}
-	messageStr := string(message)
-	_, err = a.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
+	_, err := a.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
 		LogGroupName:  &a.cloudwatch_log_group_name,
 		LogStreamName: &a.cloudwatch_log_stream_name,
-		LogEvents: []types.InputLogEvent{
-			{
-				Timestamp: &timestamp,
-				Message:   &messageStr,
-			},
-		},
+		LogEvents:     messages,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to put log events: %v", err)
+		return 0, 0, fmt.Errorf("failed to put log events: %v", err)
 	}
-	return int64(len(message)), nil
+	size := int64(0)
+	for _, message := range messages {
+		size += int64(len(*message.Message))
+	}
+	return size, count, nil
 }
