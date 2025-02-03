@@ -68,20 +68,22 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 	a.cloudwatch_client = cloudwatchlogs.New(cloudwatchlogs.Options{
 		BaseEndpoint: endpoint,
 	})
-	_, error := a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
+	_, err := a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
 		LogGroupName:  &groupName,
 		LogStreamName: &streamName,
 	})
-	if error != nil {
-		return fmt.Errorf("failed to create log stream: %v", error)
+	if err != nil {
+		return fmt.Errorf("failed to create log stream: %v", err)
 	}
+	a.cloudwatch_log_group_name = groupName
+	a.cloudwatch_log_stream_name = streamName
 	a.flusher = a.flush_cloudwatch
 	return nil
 }
 
 func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64, int64, error) {
 	timestamp := time.Now().UnixMilli()
-	messages := make([]types.InputLogEvent, len(events))
+	messages := make([]types.InputLogEvent, 0)
 	count := int64(0)
 	for _, event := range events {
 		if event == nil {

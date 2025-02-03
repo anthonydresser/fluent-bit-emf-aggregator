@@ -24,7 +24,7 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 
 //export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
-	fmt.Printf("[debug] [emf-aggregator] Enter FLBPluginInit\n")
+	fmt.Printf("[debug] [emf-aggregator] Initializing\n")
 
 	options := options.PluginOptions{}
 

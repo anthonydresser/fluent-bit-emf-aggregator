@@ -18,6 +18,12 @@ services:
       - RPS=16000
       - RETRIES=30
       - RETRY_INTERVAL=2s
+  mock-cloudwatch-server:
+    build: mock-cloudwatch-server
+    ports:
+      - "5173:5173"
+    environment:
+      - PORT=5173
 
 volumes:
   output:

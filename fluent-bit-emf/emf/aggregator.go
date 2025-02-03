@@ -65,9 +65,15 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	}
 
 	if options.OutputPath != "" {
-		aggregator.init_file_flush(options.OutputPath)
+		err := aggregator.init_file_flush(options.OutputPath)
+		if err != nil {
+			return nil, err
+		}
 	} else if options.LogGroupName != "" && options.LogStreamName != "" {
-		aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint)
+		err := aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		return nil, fmt.Errorf("no output configured")
 	}
