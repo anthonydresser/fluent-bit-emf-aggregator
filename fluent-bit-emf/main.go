@@ -104,8 +104,14 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	return output.FLB_OK
 }
 
-//export FLBPluginExit
-func FLBPluginExit() int {
+//export FLBPluginExitCtx
+func FLBPluginExitCtx(ctx unsafe.Pointer) int {
+	// perform a last flush before we are killed
+	// I don't think this actually works
+	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)
+	if err := aggregator.Flush(); err != nil {
+		fmt.Printf("[error] [emf-aggregator] failed to flush metrics: %v\n", err)
+	}
 	return output.FLB_OK
 }
 
