@@ -19,7 +19,7 @@ This is a PoC to unlock that functionality. The expectation is your application 
 
 3. This will end up outputting multiple emf stream per aggregation period due to the format constraints of emf. If your metrics depend on a dimension called `api` and your application is emitting emf records with different values for the `api` dimension, there is no way to merge these together, therefore you will get a separate output stream for each value of `api` emitted.
 
-4. Due to a weird bug between golang 1.21 and fluent-bit, I am forced to use golang 1.20 instead. Think always means we are forced to use an older version of the cloudwatch logs client, 1.36.0.
+4. Due to a weird bug between golang 1.21 and fluent-bit (see https://github.com/golang/go/issues/62440), I am forced to use golang 1.20 instead. Think always means we are forced to use an older version of the cloudwatch logs client, 1.36.0.
 
 ## Project structure
 
