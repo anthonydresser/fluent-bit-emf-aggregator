@@ -1,6 +1,6 @@
 module github.com/anthonydresser/fluent-bit-emf
 
-go 1.21
+go 1.20
 
 require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.36.0

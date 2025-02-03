@@ -8,7 +8,7 @@ ENV PATH=$PATH:/usr/local/go/bin
 
 WORKDIR /build
 COPY . .
-
+RUN go mod tidy
 RUN CGO_ENABLED=1 GOOS=linux \
     go build -buildmode=c-shared \
     -ldflags '-w' \
