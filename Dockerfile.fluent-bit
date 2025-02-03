@@ -7,7 +7,7 @@ RUN wget https://go.dev/dl/go1.20.13.linux-amd64.tar.gz && \
 ENV PATH=$PATH:/usr/local/go/bin
 
 WORKDIR /build
-COPY . .
+COPY fluent-bit-emf/ .
 RUN go mod tidy
 RUN CGO_ENABLED=1 GOOS=linux \
     go build -buildmode=c-shared \
@@ -17,7 +17,7 @@ RUN CGO_ENABLED=1 GOOS=linux \
 FROM fluent/fluent-bit:1.9
 
 COPY --from=builder /build/out_emf_aggregator.so /fluent-bit/plugins/
-COPY fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
-COPY plugins.conf /fluent-bit/etc/plugins.conf
+COPY fluent-bit-test/fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
+COPY fluent-bit-test/plugins.conf /fluent-bit/etc/plugins.conf
 
 CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]

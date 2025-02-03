@@ -1,7 +1,7 @@
 services:
   fluent-bit:
     build:
-      context: fluent-bit-emf
+      dockerfile: Dockerfile.fluent-bit
     mem_limit: 70m
     cpu_count: 256
     ports:
