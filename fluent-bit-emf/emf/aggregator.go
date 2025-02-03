@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anthonydresser/fluent-bit-emf/options"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
@@ -29,9 +30,16 @@ type EMFAggregator struct {
 	metadataStore   map[string]map[string]interface{}
 	definitionStore map[string]MetricDefinition
 	Stats           Stats
-	flusher         func(map[string]interface{}) (int64, error)
-	file_encoder    *json.Encoder
-	file            *os.File
+
+	// flushing helpers
+	flusher func(map[string]interface{}) (int64, error)
+	// file flushing
+	file_encoder *json.Encoder
+	file         *os.File
+	// cloudwatch flushing
+	cloudwatch_client          *cloudwatchlogs.Client
+	cloudwatch_log_group_name  string
+	cloudwatch_log_stream_name string
 }
 
 type AggregatedValue struct {
@@ -58,6 +66,10 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 
 	if options.OutputPath != "" {
 		aggregator.init_file_flush(options.OutputPath)
+	} else if options.LogGroupName != "" && options.LogStreamName != "" {
+		aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint)
+	} else {
+		return nil, fmt.Errorf("no output configured")
 	}
 
 	return aggregator, nil
@@ -222,12 +234,6 @@ func (a *EMFAggregator) Flush() error {
 			continue
 		}
 
-		// Get any metric to access its dimensions
-		anyMetric := metricMap[getAnyKey(metricMap)]
-		if anyMetric == nil {
-			continue
-		}
-
 		// Create output map with string keys
 		outputMap := make(map[string]interface{})
 
@@ -317,11 +323,4 @@ func createDimensionHash(dimensions map[string]string) string {
 
 	// Join all pairs with a delimiter
 	return strings.Join(pairs, ";")
-}
-
-func getAnyKey(m map[string]*AggregatedValue) string {
-	for k := range m {
-		return k
-	}
-	return ""
 }

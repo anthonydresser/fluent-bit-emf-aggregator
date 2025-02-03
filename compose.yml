@@ -3,6 +3,7 @@ services:
     build:
       context: fluent-bit-emf
     mem_limit: 70m
+    cpu_count: 256
     ports:
       - "5170:5170"
     volumes:

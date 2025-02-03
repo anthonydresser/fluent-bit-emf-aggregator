@@ -30,6 +30,14 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	options.OutputPath = output.FLBPluginConfigKey(plugin, "OutputPath")
 
+	options.LogGroupName = output.FLBPluginConfigKey(plugin, "LogGroupName")
+	options.LogStreamName = output.FLBPluginConfigKey(plugin, "LogStreamName")
+	cloudwatchEndpoint := output.FLBPluginConfigKey(plugin, "CloudWatchEndpoint")
+
+	if cloudwatchEndpoint != "" {
+		options.CloudWatchEndpoint = &cloudwatchEndpoint
+	}
+
 	period := output.FLBPluginConfigKey(plugin, "AggregationPeriod")
 	if period == "" {
 		fmt.Printf("[warn] [emf-aggregator] AggregationPeriod not set, defaulting to 1m\n")

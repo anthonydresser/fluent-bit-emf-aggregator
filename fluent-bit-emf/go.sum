@@ -1,3 +1,15 @@
+github.com/aws/aws-sdk-go-v2 v1.29.0 h1:uMlEecEwgp2gs6CsM6ugquNHr6mg0LHylPBR8u5Ojac=
+github.com/aws/aws-sdk-go-v2 v1.29.0/go.mod h1:ffIFB97e2yNsv4aTSGkqtHnppsIJzw7G7BReUZ3jCXM=
+github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 h1:x6xsQXGSmW6frevwDA+vi/wqhp1ct18mVXYN08/93to=
+github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2/go.mod h1:lPprDr1e6cJdyYeGXnRaJoP4Md+cDBvi2eOj00BlGmg=
+github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.11 h1:ltkhl3I9ddcRR3Dsy+7bOFFq546O8OYsfNEXVIyuOSE=
+github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.11/go.mod h1:H4D8JoCFNJwnT7U5U8iwgG24n71Fx2I/ZP/18eYFr9g=
+github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.11 h1:+BgX2AY7yV4ggSwa80z/yZIJX+e0jnNxjMLVyfpSXM0=
+github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.11/go.mod h1:DlBATBSDCz30BCdRFldmyLsAzJwi2pdQ+YSdJTHhTUI=
+github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.36.0 h1:lFn5aoo8DlyBWy2FynTLPSlfdjdyPN/y9LYb7uojWXE=
+github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.36.0/go.mod h1:eFPFaDAUICetgvWBzn0jH6D5zu6/+/CbtuqlaGFSMrQ=
+github.com/aws/smithy-go v1.20.2 h1:tbp628ireGtzcHDDmLT/6ADHidqnwgF57XOXZe6tp4Q=
+github.com/aws/smithy-go v1.20.2/go.mod h1:krry+ya/rV9RDcV/Q16kpu6ypI4K2czasz0NC3qS14E=
 github.com/fluent/fluent-bit-go v0.0.0-20230731091245-a7a013e2473c h1:yKN46XJHYC/gvgH2UsisJ31+n4K3S7QYZSfU2uAWjuI=
 github.com/fluent/fluent-bit-go v0.0.0-20230731091245-a7a013e2473c/go.mod h1:L92h+dgwElEyUuShEwjbiHjseW410WIcNz+Bjutc8YQ=
 github.com/ugorji/go v1.1.7/go.mod h1:kZn38zHttfInRq0xu/PH0az30d+z6vm202qpg1oXVMw=

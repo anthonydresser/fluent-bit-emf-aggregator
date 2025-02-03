@@ -1,11 +1,15 @@
 package emf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
 func (a *EMFAggregator) init_file_flush(outputPath string) error {
@@ -17,7 +21,7 @@ func (a *EMFAggregator) init_file_flush(outputPath string) error {
 	filename := filepath.Join(outputPath,
 		fmt.Sprintf("emf_aggregate_%d.json",
 			time.Now().Unix()))
-	// Create file
+	// Create file1
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", filename, err)
@@ -49,6 +53,40 @@ func (a *EMFAggregator) flush_file(data map[string]interface{}) (int64, error) {
 	return size_after.Size() - size_prior.Size(), nil
 }
 
-// func flush_cloudwatch(data map[string]interface{}) (int64, error) {
+func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName string, endpoint *string) error {
+	a.cloudwatch_client = cloudwatchlogs.New(cloudwatchlogs.Options{
+		BaseEndpoint: endpoint,
+	})
+	_, error := a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
+		LogGroupName:  &groupName,
+		LogStreamName: &streamName,
+	})
+	if error != nil {
+		return fmt.Errorf("failed to create log stream: %v", error)
+	}
+	a.flusher = a.flush_cloudwatch
+	return nil
+}
 
-// }
+func (a *EMFAggregator) flush_cloudwatch(data map[string]interface{}) (int64, error) {
+	timestamp := time.Now().UnixMilli()
+	message, err := json.Marshal(data)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal data: %v", err)
+	}
+	messageStr := string(message)
+	_, err = a.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
+		LogGroupName:  &a.cloudwatch_log_group_name,
+		LogStreamName: &a.cloudwatch_log_stream_name,
+		LogEvents: []types.InputLogEvent{
+			{
+				Timestamp: &timestamp,
+				Message:   &messageStr,
+			},
+		},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to put log events: %v", err)
+	}
+	return int64(len(message)), nil
+}
