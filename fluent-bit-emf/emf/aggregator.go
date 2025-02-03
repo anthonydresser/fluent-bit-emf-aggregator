@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthonydresser/fluent-bit-emf/options"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/fluent/fluent-bit-go/output"
 )

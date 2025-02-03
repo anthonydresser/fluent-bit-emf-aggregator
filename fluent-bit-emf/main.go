@@ -11,10 +11,10 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/anthonydresser/fluent-bit-emf/emf"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/emf"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/fluent/fluent-bit-go/output"
 )
-import "github.com/anthonydresser/fluent-bit-emf/options"
 
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {

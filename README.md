@@ -34,3 +34,5 @@ At the top level is a `compose.yml` file, which will launch the test-bed and the
 ``` bash
 fluent-bit-1     | [info] [emf-aggregator] Compressed 1041505 bytes into 64610 bytes or 93%; and 1754 Records into 36 or 97%
 ```
+
+The testbed PoC can be ran via `docker compose up --build`;

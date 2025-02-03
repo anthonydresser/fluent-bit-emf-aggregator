@@ -1,4 +1,4 @@
-module github.com/anthonydresser/fluent-bit-emf
+module github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf
 
 go 1.20
 
