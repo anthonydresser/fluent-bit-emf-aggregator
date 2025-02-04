@@ -8,7 +8,7 @@ This can drastically reduce the size of logs pushed into CloudWatch while allowi
 
 Cloudwatch logs ingestion can be expensive if you emit a lot of extrenuous data to it (https://www.reddit.com/r/aws/comments/1g4vkt5/cloudwatch_logs_cost/, https://last9.io/blog/how-to-cut-down-aws-cloudwatch-costs/, https://bit.kevinslin.com/p/youre-paying-too-much-for-cloudwatch, https://cast.ai/blog/the-truth-about-cloudwatch-pricing/). Emitting emf logs per request can emit a lot of data into Cloudwatch. However, if you still want to have access to request level emf logs, but don't want to send every emf emitted to cloudwatch for custom metrics there is not a good way.
 
-This is a PoC to unlock that functionality. The expectation is your application will emit request level emf logs into your fluentbit environment. You can then direct that input to 2 different outputs: 1 being this plugin which will aggregate it then push those into cloudwatch to be converted to custom metrics; the other being an output stream that takes those request level logs and pushes them into some other environment that you can then query at the request level.
+This is a PoC to unlock that functionality. The expectation is your application will emit request level emf logs into your fluentbit environment. You can then direct that input to 2 different outputs: 1 being this plugin which will aggregate it then push those into cloudwatch to be converted to custom metrics; the other being an output stream that takes those request level logs and pushes them into some other environment for when you need access to the request level data (disk, s3, etc.).
 
 ## Caveats
 
