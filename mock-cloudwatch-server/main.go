@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -188,6 +189,28 @@ func sendErrorResponse(w http.ResponseWriter, code, message string, status int) 
 	})
 }
 
+func parseAuthHeader(header []string) map[string]string {
+	if len(header) == 0 {
+		return nil
+	}
+
+	auth := make(map[string]string)
+	for _, v := range header {
+		initParts := strings.Split(v, " ")
+		for _, part := range initParts {
+			parts := strings.Split(part, "=")
+			if len(parts) == 1 {
+				auth[parts[0]] = ""
+			} else if len(parts) > 2 {
+				continue
+			} else {
+				auth[parts[0]] = strings.Trim(parts[1], "\"")
+			}
+		}
+	}
+	return auth
+}
+
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(new(CustomWriter))
@@ -199,6 +222,17 @@ func main() {
 	// Update paths to match AWS SDK v2 expectations
 	// The actual endpoint paths are determined by the X-Amz-Target header
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// reject requests without expected auth headers
+		log.Printf("Received header %v", r.Header)
+		auth := parseAuthHeader(r.Header["Authorization"])
+		log.Printf("Parsed auth header %v", auth)
+		if auth == nil {
+			sendErrorResponse(w, "MissingHeaderException", "Missing Authorization header", http.StatusBadRequest)
+			return
+		} else if auth["Signature"] == "" {
+			sendErrorResponse(w, "MissingHeaderException", "Missing Signature header", http.StatusBadRequest)
+			return
+		}
 		target := r.Header.Get("X-Amz-Target")
 		switch target {
 		case "Logs_20140328.CreateLogStream":

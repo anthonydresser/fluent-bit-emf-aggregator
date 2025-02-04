@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
@@ -65,10 +66,15 @@ func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int64, int6
 }
 
 func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName string, endpoint *string) error {
-	a.cloudwatch_client = cloudwatchlogs.New(cloudwatchlogs.Options{
-		BaseEndpoint: endpoint,
-	})
-	_, err := a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to load default config: %v", err)
+	}
+	if endpoint != nil {
+		cfg.BaseEndpoint = endpoint
+	}
+	a.cloudwatch_client = cloudwatchlogs.NewFromConfig(cfg)
+	_, err = a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
 		LogGroupName:  &groupName,
 		LogStreamName: &streamName,
 	})

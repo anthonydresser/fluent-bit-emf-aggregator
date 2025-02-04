@@ -9,15 +9,17 @@ services:
     volumes:
       - ./output:/tmp/emf_test
     environment:
+      # these are fake credentials simply to force aws-sdk to generate a valid header for testing
+      - AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+      - AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      - AWS_DEFAULT_REGION=us-west-2
       - FLUENT_BIT_PLUGIN_DIR=/fluent-bit/plugins
   emf-generator:
     build: test-bed
     environment:
       - HOST=fluent-bit
       - PORT=5170
-      - RPS=100000
-      - RETRIES=30
-      - RETRY_INTERVAL=2
+      - RPS=15000
   mock-cloudwatch-server:
     build: mock-cloudwatch-server
     ports:
