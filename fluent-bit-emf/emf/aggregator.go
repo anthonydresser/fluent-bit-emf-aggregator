@@ -3,6 +3,7 @@ package emf
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -62,6 +63,7 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 		metrics:           make(map[string]map[string]*AggregatedValue),
 		metadataStore:     make(map[string]map[string]interface{}),
 		definitionStore:   make(map[string]MetricDefinition),
+		LastFlush:         time.Now(),
 	}
 
 	if options.OutputPath != "" {
@@ -220,6 +222,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric, ts output.FLBTime) {
 }
 
 func (a *EMFAggregator) Flush() error {
+	log.Println("[ info] [emf-aggregator] Flushing")
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -229,7 +232,7 @@ func (a *EMFAggregator) Flush() error {
 		// Get the metadata for this dimension set
 		metadata, exists := a.metadataStore[dimHash]
 		if !exists {
-			fmt.Printf("[warn] [emf-aggregator] No metadata found for dimension hash %s\n", dimHash)
+			log.Printf("[ warn] [emf-aggregator] No metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -237,7 +240,7 @@ func (a *EMFAggregator) Flush() error {
 		awsMetadata, hasAWS := metadata["_aws"].(*AWSMetadata)
 		// Skip if no AWS metadata is available
 		if !hasAWS {
-			fmt.Printf("[warn] [emf-aggregator] No AWS metadata found for dimension hash %s\n", dimHash)
+			log.Printf("[ warn] [emf-aggregator] No AWS metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -279,7 +282,7 @@ func (a *EMFAggregator) Flush() error {
 	size_percentage := int(float64(a.Stats.InputLength-size) / float64(a.Stats.InputLength) * 100)
 	count_percentage := int(float64(a.Stats.InputRecords-count) / float64(a.Stats.InputRecords) * 100)
 
-	fmt.Printf("[info] [emf-aggregator] Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
+	log.Printf("[ info] [emf-aggregator] Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[string]map[string]*AggregatedValue)
@@ -288,6 +291,7 @@ func (a *EMFAggregator) Flush() error {
 	a.Stats.InputLength = 0
 	a.Stats.InputRecords = 0
 
+	log.Println("[ info] [emf-aggregator] Completed Flushing")
 	return nil
 }
 

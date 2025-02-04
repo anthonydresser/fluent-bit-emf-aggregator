@@ -19,4 +19,4 @@ COPY --from=builder /build/out_emf_aggregator.so /fluent-bit/plugins/
 COPY fluent-bit-test/fluent-bit.conf /fluent-bit/etc/fluent-bit.conf
 COPY fluent-bit-test/plugins.conf /fluent-bit/etc/plugins.conf
 
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf", "-v"]

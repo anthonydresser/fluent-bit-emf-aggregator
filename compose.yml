@@ -2,7 +2,7 @@ services:
   fluent-bit:
     build:
       dockerfile: Dockerfile.fluent-bit
-    mem_limit: 70m
+    mem_limit: 512m
     cpu_count: 256
     ports:
       - "5170:5170"
@@ -13,11 +13,11 @@ services:
   emf-generator:
     build: test-bed
     environment:
-      - FLUENT_HOST=fluent-bit
+      - HOST=fluent-bit
       - PORT=5170
-      - RPS=16000
+      - RPS=100000
       - RETRIES=30
-      - RETRY_INTERVAL=2s
+      - RETRY_INTERVAL=2
   mock-cloudwatch-server:
     build: mock-cloudwatch-server
     ports:

@@ -52,6 +52,12 @@ type MockCloudWatchLogs struct {
 	tokens    map[string]int                   // stream -> sequence token
 }
 
+type CustomWriter struct{}
+
+func (f CustomWriter) Write(bytes []byte) (int, error) {
+	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
+}
+
 func NewMockCloudWatchLogs() *MockCloudWatchLogs {
 	return &MockCloudWatchLogs{
 		logGroups: make(map[string]map[string]*LogStream),
@@ -143,7 +149,7 @@ func (m *MockCloudWatchLogs) handlePutLogEvents(w http.ResponseWriter, r *http.R
 		sendErrorResponse(w, "InternalFailure", err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Wrote %d events with a total of %d Bytes", len(req.LogEvents), len(rawEvents))
+	log.Printf("[ info] Wrote %d events with a total of %d Bytes", len(req.LogEvents), len(rawEvents))
 	m.tokens[streamKey]++
 
 	resp := AWSResponse{
@@ -183,6 +189,8 @@ func sendErrorResponse(w http.ResponseWriter, code, message string, status int) 
 }
 
 func main() {
+	log.SetFlags(0)
+	log.SetOutput(new(CustomWriter))
 	mock := NewMockCloudWatchLogs()
 	port := ":" + os.Getenv("PORT")
 

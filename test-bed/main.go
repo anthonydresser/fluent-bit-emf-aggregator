@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -48,6 +48,12 @@ type MetricValue struct {
 	Count  int       `json:"Count"`
 }
 
+type CustomWriter struct{}
+
+func (f CustomWriter) Write(bytes []byte) (int, error) {
+	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
+}
+
 func generateRequestID() string {
 	return fmt.Sprintf("%x-%x-%x-%x",
 		rand.Int31(), rand.Int31(),
@@ -66,35 +72,55 @@ func createMetricValue(value float64) MetricValue {
 }
 
 func main() {
-	host := flag.String("host", "fluent-bit", "Host to connect to")
-	port := flag.Int("port", 5170, "Port to send data to")
-	recordsPerSecond := flag.Int("rps", 100, "Records per second to generate")
-	maxRetries := flag.Int("retries", 30, "Maximum number of connection retries")
-	retryInterval := flag.Duration("retry-interval", 2*time.Second, "Time between retries")
-	flag.Parse()
+	log.SetFlags(0)
+	log.SetOutput(new(CustomWriter))
+	port := os.Getenv("PORT")
+	host := os.Getenv("HOST")
+	var recordsPerSecond int
+	if rawRrecordsPerSecond, exists := os.LookupEnv("RPS"); !exists {
+		log.Fatalf("Invalid RPS value")
+	} else {
+		if parsedRecordsPerSecond, err := strconv.Atoi(rawRrecordsPerSecond); err != nil {
+			log.Fatalf("Invalid RPS value: %v", err)
+		} else {
+			recordsPerSecond = parsedRecordsPerSecond
+		}
+	}
 
-	// Override host from environment if provided
-	if envHost := os.Getenv("FLUENT_HOST"); envHost != "" {
-		*host = envHost
+	maxRetries := 30
+	if rawMaxRetries, exists := os.LookupEnv("RETRIES"); exists {
+		if parsedRetries, err := strconv.Atoi(rawMaxRetries); err != nil {
+			log.Fatalf("Invalid RETRIES value: %v", err)
+		} else {
+			maxRetries = parsedRetries
+		}
+	}
+	retryInterval := 2 * time.Second
+	if rawRetryInterval, exists := os.LookupEnv("RETRY_INTERVAL"); exists {
+		if parseRetryInterval, err := strconv.Atoi(rawRetryInterval); err != nil {
+			log.Fatalf("Invalid RETRY_INTERVAL value: %v", err)
+		} else {
+			retryInterval = time.Duration(parseRetryInterval) * time.Second
+		}
 	}
 
 	var conn net.Conn
 	var err error
 
 	// Connection retry loop
-	log.Printf("Attempting to connect to %s:%d", *host, *port)
-	for i := 0; i < *maxRetries; i++ {
-		conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", *host, *port))
+	log.Printf("Attempting to connect to %s:%s", host, port)
+	for i := 0; i < maxRetries; i++ {
+		conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 		if err == nil {
-			log.Printf("Successfully connected to %s:%d", *host, *port)
+			log.Printf("[ info] Successfully connected to %s:%s", host, port)
 			break
 		}
-		log.Printf("Connection attempt %d failed: %v. Retrying in %v...", i+1, err, *retryInterval)
-		time.Sleep(*retryInterval)
+		log.Printf("Connection attempt %d failed: %v. Retrying in %v...", i+1, err, retryInterval)
+		time.Sleep(retryInterval)
 	}
 
 	if err != nil {
-		log.Fatalf("Failed to connect after %d attempts: %v", *maxRetries, err)
+		log.Fatalf("Failed to connect after %d attempts: %v", maxRetries, err)
 	}
 	defer conn.Close()
 
@@ -124,49 +150,56 @@ func main() {
 		},
 	}
 
-	ticker := time.NewTicker(time.Second / time.Duration(*recordsPerSecond))
+	// 1ms is the lowest resolution we can go
+	duration := time.Second / time.Duration(min(recordsPerSecond, 1000))
+
+	recordsPerRun := max(1, recordsPerSecond/1000)
+
+	log.Printf("[ info] Starting to generate %d EMF records every %v...", recordsPerRun, duration)
+
+	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
-	log.Printf("Starting to generate %d EMF records per second...", *recordsPerSecond)
-
 	for range ticker.C {
-		// Generate random values
-		latency := rand.Float64() * 1000        // 0-1000ms
-		size := rand.Intn(1000)                 // 0-1000 bytes
-		fault := rand.Intn(2)                   // 0 or 1
-		functionCalled := float64(rand.Intn(2)) // 0 or 1
+		for i := 0; i < recordsPerRun; i++ {
+			// Generate random values
+			latency := rand.Float64() * 1000        // 0-1000ms
+			size := rand.Intn(1000)                 // 0-1000 bytes
+			fault := rand.Intn(2)                   // 0 or 1
+			functionCalled := float64(rand.Intn(2)) // 0 or 1
 
-		emf := EMFMetric{
-			AWS: AWSMetadata{
-				Timestamp:         time.Now().UnixMilli(),
-				CloudWatchMetrics: []MetricDefinition{metricDef},
-			},
-			Latency:   createMetricValue(latency),
-			Fault:     fault,
-			Size:      size,
-			Function:  createMetricValue(functionCalled),
-			Service:   services[rand.Intn(len(services))],
-			Operation: operations[rand.Intn(len(operations))],
-			Client:    clients[rand.Intn(len(clients))],
-			RequestID: generateRequestID(),
-		}
+			emf := EMFMetric{
+				AWS: AWSMetadata{
+					Timestamp:         time.Now().UnixMilli(),
+					CloudWatchMetrics: []MetricDefinition{metricDef},
+				},
+				Latency:   createMetricValue(latency),
+				Fault:     fault,
+				Size:      size,
+				Function:  createMetricValue(functionCalled),
+				Service:   services[rand.Intn(len(services))],
+				Operation: operations[rand.Intn(len(operations))],
+				Client:    clients[rand.Intn(len(clients))],
+				RequestID: generateRequestID(),
+			}
 
-		// Marshal to JSON and write to socket
-		data, err := json.Marshal(emf)
-		if err != nil {
-			log.Printf("Failed to marshal EMF: %v", err)
-			continue
-		}
+			// Marshal to JSON and write to socket
+			data, err := json.Marshal(emf)
+			if err != nil {
+				log.Printf("Failed to marshal EMF: %v", err)
+				continue
+			}
 
-		// Add newline for Fluent Bit parsing
-		data = append(data, '\n')
+			// Add newline for Fluent Bit parsing
+			data = append(data, '\n')
 
-		_, err = conn.Write(data)
-		if err != nil {
-			log.Printf("Failed to write to socket: %v", err)
-			// Try to reconnect
-			if conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", *host, *port)); err != nil {
-				log.Printf("Failed to reconnect: %v", err)
+			_, err = conn.Write(data)
+			if err != nil {
+				log.Printf("Failed to write to socket: %v", err)
+				// Try to reconnect
+				if conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", host, port)); err != nil {
+					log.Printf("Failed to reconnect: %v", err)
+				}
 			}
 		}
 	}
