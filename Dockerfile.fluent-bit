@@ -9,8 +9,7 @@ ENV PATH=$PATH:/usr/local/go/bin
 WORKDIR /build
 COPY fluent-bit-emf/ .
 RUN go mod tidy
-RUN CGO_ENABLED=1 GOOS=linux \
-    go build -buildmode=c-shared \
+RUN go build -buildmode=c-shared \
     -ldflags '-w' \
     -o out_emf_aggregator.so .
 
