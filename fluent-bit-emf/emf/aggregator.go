@@ -263,7 +263,7 @@ func (a *EMFAggregator) Flush() error {
 		// Add all extra fields from metadata
 		for key, value := range metadata {
 			// Skip special fields we've already handled
-			if key != "_aws" && key != "dimensions" && key != "timestamp" {
+			if key != "_aws" {
 				// Convert any map[interface{}]interface{} to map[string]interface{}
 				outputMap[key] = convertToStringKeyMap(value)
 			}

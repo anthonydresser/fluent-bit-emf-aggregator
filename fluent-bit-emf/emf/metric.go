@@ -3,6 +3,7 @@ package emf
 import (
 	"fmt"
 	"log"
+	"reflect"
 )
 
 type AWSMetadata struct {
@@ -59,6 +60,14 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 				aws.Timestamp = v
 			case int:
 				aws.Timestamp = int64(v)
+			case uint:
+				aws.Timestamp = int64(v)
+			case uint32:
+				aws.Timestamp = int64(v)
+			case uint64:
+				aws.Timestamp = int64(v)
+			default:
+				return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
 			}
 		}
 
