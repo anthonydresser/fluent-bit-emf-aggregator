@@ -4,23 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 )
 
 func (a *EMFAggregator) init_file_flush(outputPath string) error {
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputPath, 0600); err != nil {
-		return fmt.Errorf("failed to create output directory: %v", err)
-	}
-	// Create filename with timestamp and dimension hash
-	filename := filepath.Join(outputPath,
-		fmt.Sprintf("emf_aggregate_%d.json",
-			time.Now().Unix()))
 	// Create file1
-	file, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("failed to create file %s: %v", filename, err)
+	var file *os.File
+	if _, err := os.Stat(outputPath); err != nil {
+		file, err = os.Create(outputPath)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s: %v", outputPath, err)
+		}
+	} else {
+		file, err = os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %v", outputPath, err)
+		}
 	}
 
 	// Create encoder with indentation for readability
