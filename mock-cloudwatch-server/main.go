@@ -223,9 +223,7 @@ func main() {
 	// The actual endpoint paths are determined by the X-Amz-Target header
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// reject requests without expected auth headers
-		log.Printf("Received header %v", r.Header)
 		auth := parseAuthHeader(r.Header["Authorization"])
-		log.Printf("Parsed auth header %v", auth)
 		if auth == nil {
 			sendErrorResponse(w, "MissingHeaderException", "Missing Authorization header", http.StatusBadRequest)
 			return

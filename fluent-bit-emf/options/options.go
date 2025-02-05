@@ -7,5 +7,6 @@ type PluginOptions struct {
 	AggregationPeriod  time.Duration
 	LogGroupName       string
 	LogStreamName      string
-	CloudWatchEndpoint *string
+	CloudWatchEndpoint string
+	Protocol           string
 }

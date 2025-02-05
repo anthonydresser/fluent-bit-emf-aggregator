@@ -37,17 +37,13 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	options := options.PluginOptions{}
 
-	options.OutputPath = output.FLBPluginConfigKey(plugin, "OutputPath")
+	options.OutputPath = output.FLBPluginConfigKey(plugin, "output_path")
+	options.LogGroupName = output.FLBPluginConfigKey(plugin, "log_group_name")
+	options.LogStreamName = output.FLBPluginConfigKey(plugin, "log_stream_name")
+	options.CloudWatchEndpoint = output.FLBPluginConfigKey(plugin, "endpoint")
+	options.Protocol = output.FLBPluginConfigKey(plugin, "protocol")
 
-	options.LogGroupName = output.FLBPluginConfigKey(plugin, "LogGroupName")
-	options.LogStreamName = output.FLBPluginConfigKey(plugin, "LogStreamName")
-	cloudwatchEndpoint := output.FLBPluginConfigKey(plugin, "CloudWatchEndpoint")
-
-	if cloudwatchEndpoint != "" {
-		options.CloudWatchEndpoint = &cloudwatchEndpoint
-	}
-
-	period := output.FLBPluginConfigKey(plugin, "AggregationPeriod")
+	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
 	if period == "" {
 		log.Println("[ warn] [emf-aggregator] AggregationPeriod not set, defaulting to 1m")
 		period = "1m"
@@ -83,7 +79,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)
 
 	for {
-		ret, ts, record := output.GetRecord(dec)
+		ret, _, record := output.GetRecord(dec)
 		if ret != 0 {
 			break
 		}
@@ -97,7 +93,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 		}
 
 		// Aggregate the metric
-		aggregator.AggregateMetric(emf, ts.(output.FLBTime))
+		aggregator.AggregateMetric(emf)
 		aggregator.Stats.InputRecords++
 	}
 

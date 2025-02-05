@@ -108,7 +108,7 @@ func main() {
 	var err error
 
 	// Connection retry loop
-	log.Printf("Attempting to connect to %s:%s", host, port)
+	log.Printf("[ info] Attempting to connect to %s:%s", host, port)
 	for i := 0; i < maxRetries; i++ {
 		conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
 		if err == nil {

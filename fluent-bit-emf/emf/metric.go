@@ -33,6 +33,7 @@ type EMFMetric struct {
 	DimensionSet map[string]bool        `json:"-"`
 	Dimensions   map[string]string      `json:"-"`
 	MetricData   map[string]MetricValue `json:"-"`
+	Tag          string                 `json:"-"`
 }
 
 // EMF structures remain the same, but we'll add a new constructor

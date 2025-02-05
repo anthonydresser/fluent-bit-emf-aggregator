@@ -14,12 +14,16 @@ services:
       - AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
       - AWS_DEFAULT_REGION=us-west-2
       - FLUENT_BIT_PLUGIN_DIR=/fluent-bit/plugins
+    depends_on:
+      - mock-cloudwatch-server
   emf-generator:
     build: test-bed
     environment:
       - HOST=fluent-bit
       - PORT=5170
       - RPS=15000
+    depends_on:
+      - fluent-bit
   mock-cloudwatch-server:
     build: mock-cloudwatch-server
     ports:

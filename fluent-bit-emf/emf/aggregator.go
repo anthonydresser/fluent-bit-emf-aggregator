@@ -12,7 +12,6 @@ import (
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"github.com/fluent/fluent-bit-go/output"
 )
 
 type Stats struct {
@@ -72,7 +71,7 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 			return nil, err
 		}
 	} else if options.LogGroupName != "" && options.LogStreamName != "" {
-		err := aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint)
+		err := aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint, options.Protocol)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +82,7 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	return aggregator, nil
 }
 
-func (a *EMFAggregator) AggregateMetric(emf *EMFMetric, ts output.FLBTime) {
+func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
