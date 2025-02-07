@@ -46,99 +46,103 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 		Dimensions:   make(map[string]string),
 	}
 
-	if awsData, ok := record["_aws"].(map[interface{}]interface{}); !ok {
+	if rawAwsData, exists := record["_aws"]; !exists {
 		return nil, fmt.Errorf("no aws metadata from found in record; likely means malformed record")
 	} else {
-		aws := &AWSMetadata{}
-
-		// Handle Timestamp
-		if ts, exists := awsData["Timestamp"]; !exists {
-			return nil, fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
+		if awsData, ok := rawAwsData.(map[interface{}]interface{}); !ok {
+			return nil, fmt.Errorf("aws metadata was not expected type; expect map, was %v", rawAwsData)
 		} else {
-			switch v := ts.(type) {
-			case int64:
-				aws.Timestamp = v
-			case int:
-				aws.Timestamp = int64(v)
-			case uint:
-				aws.Timestamp = int64(v)
-			case uint32:
-				aws.Timestamp = int64(v)
-			case uint64:
-				aws.Timestamp = int64(v)
-			default:
-				return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
-			}
-		}
+			aws := &AWSMetadata{}
 
-		// Handle CloudWatch Metrics
-		if cwMetrics, exists := awsData["CloudWatchMetrics"]; !exists {
-			return nil, fmt.Errorf("no CloudWatchMetrics key was found; likely means malformed record")
-		} else {
-			if metricsArray, ok := cwMetrics.([]interface{}); !ok {
-				return nil, fmt.Errorf("CloudWatchMetrics is not an array; likely means malformed record")
+			// Handle Timestamp
+			if ts, exists := awsData["Timestamp"]; !exists {
+				return nil, fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
 			} else {
-				aws.CloudWatchMetrics = make([]MetricDefinition, len(metricsArray))
-				for i, metricDef := range metricsArray {
-					if md, ok := metricDef.(map[interface{}]interface{}); !ok {
-						log.Printf("[ warn] Skipping metric: Metric definition was not a map, was %v\n", metricDef)
-						continue
-					} else {
-						// Parse Namespace
-						if ns, exists := md["Namespace"]; !exists {
-							log.Println("[ warn] Skipping metric: Metric definition had no Namespace field")
-							continue
-						} else {
-							aws.CloudWatchMetrics[i].Namespace = toString(ns)
-						}
+				switch v := ts.(type) {
+				case int64:
+					aws.Timestamp = v
+				case int:
+					aws.Timestamp = int64(v)
+				case uint:
+					aws.Timestamp = int64(v)
+				case uint32:
+					aws.Timestamp = int64(v)
+				case uint64:
+					aws.Timestamp = int64(v)
+				default:
+					return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
+				}
+			}
 
-						// Parse Dimensions
-						if dims, exists := md["Dimensions"]; !exists {
-							log.Println("[ warn] Skipping metric: Metric definition had no Dimensions field")
+			// Handle CloudWatch Metrics
+			if cwMetrics, exists := awsData["CloudWatchMetrics"]; !exists {
+				return nil, fmt.Errorf("no CloudWatchMetrics key was found; likely means malformed record")
+			} else {
+				if metricsArray, ok := cwMetrics.([]interface{}); !ok {
+					return nil, fmt.Errorf("CloudWatchMetrics is not an array; likely means malformed record")
+				} else {
+					aws.CloudWatchMetrics = make([]MetricDefinition, len(metricsArray))
+					for i, metricDef := range metricsArray {
+						if md, ok := metricDef.(map[interface{}]interface{}); !ok {
+							log.Printf("[ warn] Skipping metric: Metric definition was not a map, was %v\n", metricDef)
 							continue
 						} else {
-							if dimArray, ok := dims.([]interface{}); !ok {
-								log.Printf("[ warn] Skipping metric: Dimensions was not an array, was %v\n", dims)
+							// Parse Namespace
+							if ns, exists := md["Namespace"]; !exists {
+								log.Println("[ warn] Skipping metric: Metric definition had no Namespace field")
 								continue
 							} else {
-								aws.CloudWatchMetrics[i].Dimensions = make([][]string, len(dimArray))
-								for j, dim := range dimArray {
-									if dimSet, ok := dim.([]interface{}); !ok {
-										log.Printf("[ warn] Skipping dimension set: was not an array, was %v\n", dim)
-										continue
-									} else {
-										dimStrings := make([]string, len(dimSet))
-										for k, d := range dimSet {
-											dimStrings[k] = toString(d)
-											emf.DimensionSet[toString(d)] = true
+								aws.CloudWatchMetrics[i].Namespace = toString(ns)
+							}
+
+							// Parse Dimensions
+							if dims, exists := md["Dimensions"]; !exists {
+								log.Println("[ warn] Skipping metric: Metric definition had no Dimensions field")
+								continue
+							} else {
+								if dimArray, ok := dims.([]interface{}); !ok {
+									log.Printf("[ warn] Skipping metric: Dimensions was not an array, was %v\n", dims)
+									continue
+								} else {
+									aws.CloudWatchMetrics[i].Dimensions = make([][]string, len(dimArray))
+									for j, dim := range dimArray {
+										if dimSet, ok := dim.([]interface{}); !ok {
+											log.Printf("[ warn] Skipping dimension set: was not an array, was %v\n", dim)
+											continue
+										} else {
+											dimStrings := make([]string, len(dimSet))
+											for k, d := range dimSet {
+												dimStrings[k] = toString(d)
+												emf.DimensionSet[toString(d)] = true
+											}
+											aws.CloudWatchMetrics[i].Dimensions[j] = dimStrings
 										}
-										aws.CloudWatchMetrics[i].Dimensions[j] = dimStrings
 									}
 								}
 							}
-						}
 
-						// Parse Metrics
-						if metrics, exists := md["Metrics"]; !exists {
-							log.Println("[ warn] Skipping metric: Metric definition had no Metrics field")
-							continue
-						} else {
-							if metricsArray, ok := metrics.([]interface{}); !ok {
-								log.Printf("[ warn] Skipping metric: Metrics was not an array, was %v\n", metrics)
+							// Parse Metrics
+							if metrics, exists := md["Metrics"]; !exists {
+								log.Println("[ warn] Skipping metric: Metric definition had no Metrics field")
 								continue
 							} else {
-								aws.CloudWatchMetrics[i].Metrics = make([]struct {
-									Name string `json:"Name"`
-									Unit string `json:"Unit,omitempty"`
-								}, len(metricsArray))
+								if metricsArray, ok := metrics.([]interface{}); !ok {
+									log.Printf("[ warn] Skipping metric: Metrics was not an array, was %v\n", metrics)
+									continue
+								} else {
+									aws.CloudWatchMetrics[i].Metrics = make([]struct {
+										Name string `json:"Name"`
+										Unit string `json:"Unit,omitempty"`
+									}, len(metricsArray))
 
-								for j, metric := range metricsArray {
-									if m, ok := metric.(map[interface{}]interface{}); !ok {
-										log.Printf("[ warn] Skipping metric: Metric was not a map, was %v\n", metric)
-										continue
-									} else {
-										aws.CloudWatchMetrics[i].Metrics[j].Name = toString(m["Name"])
-										aws.CloudWatchMetrics[i].Metrics[j].Unit = toString(m["Unit"])
+									for j, metric := range metricsArray {
+										if m, ok := metric.(map[interface{}]interface{}); !ok {
+											log.Printf("[ warn] Skipping metric: Metric was not a map, was %v\n", metric)
+											continue
+										} else {
+											aws.CloudWatchMetrics[i].Metrics[j].Name = toString(m["Name"])
+											aws.CloudWatchMetrics[i].Metrics[j].Unit = toString(m["Unit"])
+										}
 									}
 								}
 							}
@@ -146,9 +150,8 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 					}
 				}
 			}
+			emf.AWS = aws
 		}
-
-		emf.AWS = aws
 	}
 
 	for key, value := range record {

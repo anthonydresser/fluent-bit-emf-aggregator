@@ -40,34 +40,87 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 
 func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64, int64, error) {
 	timestamp := time.Now().UnixMilli()
-	messages := make([]types.InputLogEvent, 0)
-	count := int64(0)
+	var totalSize int64 = 0
+	var totalCount int64 = 0
+
+	// Create batches that respect CloudWatch Logs limits
+	var currentBatch []types.InputLogEvent
+	var currentBatchSize int64 = 0
+	const maxBatchSize int64 = 1024 * 1024 // 1MB in bytes
+
 	for _, event := range events {
 		if event == nil {
 			continue
 		}
+
 		marshalled, err := json.Marshal(event)
 		if err != nil {
-			return 0, 0, fmt.Errorf("failed to marshal event: %v", err)
+			return totalSize, totalCount, fmt.Errorf("failed to marshal event: %v", err)
 		}
+
 		marshalledString := string(marshalled)
-		messages = append(messages, types.InputLogEvent{
+		eventSize := int64(len(marshalledString))
+
+		// If single event is too large, skip it
+		if eventSize > maxBatchSize {
+			continue
+		}
+
+		// If adding this event would exceed batch size, flush current batch
+		if currentBatchSize+eventSize > maxBatchSize {
+			size, err := a.send_cloudwatch_batch(currentBatch)
+			if err != nil {
+				return totalSize, totalCount, err
+			}
+			totalSize += size
+			totalCount += int64(len(currentBatch))
+
+			// Reset batch
+			currentBatch = make([]types.InputLogEvent, 0)
+			currentBatchSize = 0
+		}
+
+		// Add event to current batch
+		currentBatch = append(currentBatch, types.InputLogEvent{
 			Timestamp: &timestamp,
 			Message:   &marshalledString,
 		})
-		count++
+		currentBatchSize += eventSize
 	}
+
+	// Send final batch if not empty
+	if len(currentBatch) > 0 {
+		size, err := a.send_cloudwatch_batch(currentBatch)
+		if err != nil {
+			return totalSize, totalCount, err
+		}
+		totalSize += size
+		totalCount += int64(len(currentBatch))
+	}
+
+	return totalSize, totalCount, nil
+}
+
+// Helper function to send a batch of events
+func (a *EMFAggregator) send_cloudwatch_batch(batch []types.InputLogEvent) (int64, error) {
+	if len(batch) == 0 {
+		return 0, nil
+	}
+
 	_, err := a.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
 		LogGroupName:  &a.cloudwatch_log_group_name,
 		LogStreamName: &a.cloudwatch_log_stream_name,
-		LogEvents:     messages,
+		LogEvents:     batch,
 	})
+
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to put log events: %v", err)
+		return 0, fmt.Errorf("failed to put log events: %v", err)
 	}
-	size := int64(0)
-	for _, message := range messages {
-		size += int64(len(*message.Message))
+
+	var batchSize int64 = 0
+	for _, event := range batch {
+		batchSize += int64(len(*event.Message))
 	}
-	return size, count, nil
+
+	return batchSize, nil
 }

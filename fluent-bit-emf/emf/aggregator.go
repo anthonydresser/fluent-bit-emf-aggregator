@@ -272,6 +272,11 @@ func (a *EMFAggregator) Flush() error {
 		outputEvents = append(outputEvents, outputMap)
 	}
 
+	if len(outputEvents) == 0 {
+		log.Println("[ warn] [emf-aggregator] No events to flush, skipping")
+		return nil
+	}
+
 	size, count, err := a.flusher(outputEvents)
 
 	if err != nil {
