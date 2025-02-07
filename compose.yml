@@ -17,13 +17,12 @@ services:
     depends_on:
       - mock-cloudwatch-server
   emf-generator:
-    build: test-bed
+    build: test-generator
     environment:
-      - HOST=fluent-bit
-      - PORT=5170
-      - RPS=15000
+      - AWS_EMF_AGENT_ENDPOINT=tcp://fluent-bit:5170
     depends_on:
       - fluent-bit
+  
   mock-cloudwatch-server:
     build: mock-cloudwatch-server
     ports:
