@@ -292,7 +292,7 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	outputEvents := make([]map[string]interface{}, 0)
+	outputEvents := make([]map[string]interface{}, 0, len(a.metrics))
 
 	for dimHash, metricMap := range a.metrics {
 		// Get the metadata for this dimension set

@@ -57,7 +57,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 	var totalCount int64 = 0
 
 	// Create batches that respect CloudWatch Logs limits
-	var currentBatch []types.InputLogEvent
+	currentBatch := make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
 	var currentBatchSize int = 0
 
 	for _, event := range events {
@@ -87,7 +87,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 			totalCount += int64(len(currentBatch))
 
 			// Reset batch
-			currentBatch = make([]types.InputLogEvent, 0)
+			currentBatch = make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
 			currentBatchSize = 0
 		}
 
