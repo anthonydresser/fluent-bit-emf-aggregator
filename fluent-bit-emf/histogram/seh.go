@@ -2,7 +2,7 @@ package histogram
 
 import "math"
 
-type ExponentialHistogram struct {
+type exponentialHistogram struct {
 	buckets map[int]uint
 	binSize float64
 	count   uint
@@ -15,14 +15,14 @@ const (
 	epsilon = 0.1
 )
 
-type Bucket struct {
+type histogramBucket struct {
 	Value float64
 	Count uint
 }
 
 // NewExponentialHistogram creates a new histogram with exponential buckets
-func NewExponentialHistogram() *ExponentialHistogram {
-	return &ExponentialHistogram{
+func NewExponentialHistogram() *exponentialHistogram {
+	return &exponentialHistogram{
 		buckets: make(map[int]uint),
 		binSize: math.Log(1 + epsilon),
 		sum:     0,
@@ -32,7 +32,7 @@ func NewExponentialHistogram() *ExponentialHistogram {
 }
 
 // getBucketIndex returns the bucket index for a given value
-func (h *ExponentialHistogram) getBucketIndex(value float64) int {
+func (h *exponentialHistogram) getBucketIndex(value float64) int {
 	if value <= 0 {
 		return 0
 	}
@@ -40,28 +40,28 @@ func (h *ExponentialHistogram) getBucketIndex(value float64) int {
 }
 
 // GetBucketBounds returns the lower and upper bounds for a bucket
-func (h *ExponentialHistogram) ValueOf(bucket int) float64 {
+func (h *exponentialHistogram) ValueOf(bucket int) float64 {
 	return math.Exp((float64(bucket) + 0.5) * h.binSize)
 }
 
 // GetBucketCount returns the count for a specific bucket
-func (h *ExponentialHistogram) GetBucketCount(bucket int) uint {
+func (h *exponentialHistogram) GetBucketCount(bucket int) uint {
 	return h.buckets[bucket]
 }
 
 // GetNonEmptyBuckets returns a map of non-empty buckets and their counts
-func (h *ExponentialHistogram) GetNonEmptyBuckets() []Bucket {
-	result := make([]Bucket, 0)
+func (h *exponentialHistogram) GetNonEmptyBuckets() []histogramBucket {
+	result := make([]histogramBucket, 0)
 	for bucket, count := range h.buckets {
 		if count > 0 {
-			result = append(result, Bucket{Value: h.ValueOf(bucket), Count: count})
+			result = append(result, histogramBucket{Value: h.ValueOf(bucket), Count: count})
 		}
 	}
 	return result
 }
 
 // Add adds a value to the histogram
-func (h *ExponentialHistogram) Add(value float64, count uint) {
+func (h *exponentialHistogram) Add(value float64, count uint) {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return
 	}
@@ -80,12 +80,12 @@ func (h *ExponentialHistogram) Add(value float64, count uint) {
 }
 
 // Sum returns the sum of all values added
-func (h *ExponentialHistogram) Sum() float64 {
+func (h *exponentialHistogram) Sum() float64 {
 	return h.sum
 }
 
 // Mean returns the arithmetic mean of all values
-func (h *ExponentialHistogram) Mean() float64 {
+func (h *exponentialHistogram) Mean() float64 {
 	if h.count == 0 {
 		return 0
 	}
@@ -93,7 +93,7 @@ func (h *ExponentialHistogram) Mean() float64 {
 }
 
 // Merge combines another histogram into this one
-func (h *ExponentialHistogram) Merge(other *ExponentialHistogram) {
+func (h *exponentialHistogram) Merge(other *exponentialHistogram) {
 	if other.binSize != h.binSize {
 		return // Cannot merge histograms with different bases
 	}
