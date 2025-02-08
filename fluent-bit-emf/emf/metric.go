@@ -5,25 +5,10 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
-
-type AWSMetadata struct {
-	Timestamp         int64                  `json:"Timestamp,omitempty"`
-	CloudWatchMetrics []ProjectionDefinition `json:"CloudWatchMetrics"`
-}
-
-type MetricDefinition struct {
-	Name string `json:"Name"`
-	Unit string `json:"Unit,omitempty"`
-}
-
-type ProjectionDefinition struct {
-	Namespace  string             `json:"Namespace"`
-	Dimensions [][]string         `json:"Dimensions"`
-	Metrics    []MetricDefinition `json:"Metrics"`
-}
 
 type MetricValue struct {
 	Value  *float64  `json:"Value,omitempty"`
@@ -36,7 +21,7 @@ type MetricValue struct {
 }
 
 type EMFMetric struct {
-	AWS          *AWSMetadata           `json:"_aws"`
+	AWS          *common.AWSMetadata    `json:"_aws"`
 	DimensionSet map[string]bool        `json:"-"`
 	Dimensions   map[string]string      `json:"-"`
 	MetricData   map[string]MetricValue `json:"-"`
@@ -57,7 +42,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 		if awsData, ok := rawAwsData.(map[interface{}]interface{}); !ok {
 			return nil, fmt.Errorf("aws metadata was not expected type; expect map, was %v", rawAwsData)
 		} else {
-			aws := &AWSMetadata{}
+			aws := &common.AWSMetadata{}
 
 			// Handle Timestamp
 			if ts, exists := awsData["Timestamp"]; !exists {
@@ -86,7 +71,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 				if metricsArray, ok := cwMetrics.([]interface{}); !ok {
 					return nil, fmt.Errorf("CloudWatchMetrics is not an array; likely means malformed record")
 				} else {
-					aws.CloudWatchMetrics = make([]ProjectionDefinition, len(metricsArray))
+					aws.CloudWatchMetrics = make([]common.ProjectionDefinition, len(metricsArray))
 					for i, metricDef := range metricsArray {
 						if md, ok := metricDef.(map[interface{}]interface{}); !ok {
 							log.Warn().Printf("Skipping metric: Metric definition was not a map, was %v\n", metricDef)
@@ -137,7 +122,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 									log.Warn().Printf("Skipping metric: Metrics was not an array, was %v\n", metrics)
 									continue
 								} else {
-									aws.CloudWatchMetrics[i].Metrics = make([]MetricDefinition, len(metricsArray))
+									aws.CloudWatchMetrics[i].Metrics = make([]common.MetricDefinition, len(metricsArray))
 
 									for j, metric := range metricsArray {
 										if m, ok := metric.(map[interface{}]interface{}); !ok {

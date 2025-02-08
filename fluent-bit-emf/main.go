@@ -10,9 +10,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/emf"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
@@ -26,7 +26,7 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 func FLBPluginInit(plugin unsafe.Pointer) int {
 	log.Info().Println("Initializing")
 
-	options := options.PluginOptions{}
+	options := common.PluginOptions{}
 
 	options.OutputPath = output.FLBPluginConfigKey(plugin, "output_path")
 	options.LogGroupName = output.FLBPluginConfigKey(plugin, "log_group_name")
@@ -48,7 +48,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	options.AggregationPeriod = aggregationPeriod
 
-	aggregator, err := emf.NewEMFAggregator(options)
+	aggregator, err := emf.NewEMFAggregator(&options)
 	if err != nil {
 		log.Info().Printf("failed to create EMFAggregator: %v\n", err)
 		return output.FLB_ERROR

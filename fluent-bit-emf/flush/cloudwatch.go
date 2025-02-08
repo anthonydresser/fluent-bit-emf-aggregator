@@ -1,4 +1,4 @@
-package emf
+package flush
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -24,10 +25,16 @@ const (
 	maxGroupStreamLength   = 512
 )
 
-func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName string, endpoint string, protocol string) error {
+type cloudwatchFlusher struct {
+	cloudwatch_client          *cloudwatchlogs.Client
+	cloudwatch_log_group_name  string
+	cloudwatch_log_stream_name string
+}
+
+func init_cloudwatch_flush(groupName string, streamName string, endpoint string, protocol string) (*cloudwatchFlusher, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		return fmt.Errorf("failed to load default config: %v", err)
+		return nil, fmt.Errorf("failed to load default config: %v", err)
 	}
 	if endpoint != "" {
 		destination := "https://"
@@ -37,21 +44,21 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 		destination += endpoint
 		cfg.BaseEndpoint = &destination
 	}
-	a.cloudwatch_client = cloudwatchlogs.NewFromConfig(cfg)
-	_, err = a.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
+	flusher := &cloudwatchFlusher{}
+	flusher.cloudwatch_client = cloudwatchlogs.NewFromConfig(cfg)
+	_, err = flusher.cloudwatch_client.CreateLogStream(context.Background(), &cloudwatchlogs.CreateLogStreamInput{
 		LogGroupName:  &groupName,
 		LogStreamName: &streamName,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create log stream: %v", err)
+		return nil, fmt.Errorf("failed to create log stream: %v", err)
 	}
-	a.cloudwatch_log_group_name = groupName
-	a.cloudwatch_log_stream_name = streamName
-	a.flusher = a.flush_cloudwatch
-	return nil
+	flusher.cloudwatch_log_group_name = groupName
+	flusher.cloudwatch_log_stream_name = streamName
+	return flusher, nil
 }
 
-func (a *EMFAggregator) flush_cloudwatch(events []EMFEvent) (int, int, error) {
+func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) (int, int, error) {
 	totalSize := 0
 	totalCount := 0
 
@@ -74,7 +81,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []EMFEvent) (int, int, error) {
 
 		// If adding this event would exceed batch size, flush current batch
 		if (currentBatchSize+len(data)+perEventBytes) > maximumBytesPerPut || len(currentBatch) == maximumLogEventsPerPut {
-			size, err := a.send_cloudwatch_batch(currentBatch)
+			size, err := f.send_cloudwatch_batch(currentBatch)
 			if err != nil {
 				return totalSize, totalCount, err
 			}
@@ -97,7 +104,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []EMFEvent) (int, int, error) {
 
 	// Send final batch if not empty
 	if len(currentBatch) > 0 {
-		size, err := a.send_cloudwatch_batch(currentBatch)
+		size, err := f.send_cloudwatch_batch(currentBatch)
 		if err != nil {
 			return totalSize, totalCount, err
 		}
@@ -109,14 +116,14 @@ func (a *EMFAggregator) flush_cloudwatch(events []EMFEvent) (int, int, error) {
 }
 
 // Helper function to send a batch of events
-func (a *EMFAggregator) send_cloudwatch_batch(batch []types.InputLogEvent) (int, error) {
+func (f *cloudwatchFlusher) send_cloudwatch_batch(batch []types.InputLogEvent) (int, error) {
 	if len(batch) == 0 {
 		return 0, nil
 	}
 
-	_, err := a.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
-		LogGroupName:  &a.cloudwatch_log_group_name,
-		LogStreamName: &a.cloudwatch_log_stream_name,
+	_, err := f.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
+		LogGroupName:  &f.cloudwatch_log_group_name,
+		LogStreamName: &f.cloudwatch_log_stream_name,
 		LogEvents:     batch,
 	})
 

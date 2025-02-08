@@ -7,22 +7,19 @@ package emf
 */
 import (
 	"C"
-	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/histogram"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/fluent/fluent-bit-go/output"
 )
+import "github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 
 type InputStats struct {
 	InputLength  int
@@ -32,7 +29,7 @@ type InputStats struct {
 // Plugin context
 type EMFAggregator struct {
 	mu                sync.RWMutex
-	AggregationPeriod time.Duration
+	aggregationPeriod time.Duration
 	// Map of dimension hash -> metric name -> aggregated values
 	metrics map[string]map[string]*histogram.Histogram
 	// Store metadata and metric definitions
@@ -40,46 +37,26 @@ type EMFAggregator struct {
 	stats         InputStats
 
 	// flushing helpers
-	flusher func([]EMFEvent) (int, int, error)
-	// file flushing
-	file_encoder *json.Encoder
-	file         *os.File
-	// cloudwatch flushing
-	cloudwatch_client          *cloudwatchlogs.Client
-	cloudwatch_log_group_name  string
-	cloudwatch_log_stream_name string
-	Task                       *ScheduledTask
+	flusher flush.Flusher
+	Task    *ScheduledTask
 }
 
 type Metadata struct {
-	AWS        *AWSMetadata
+	AWS        *common.AWSMetadata
 	Dimensions map[string]string
 }
 
-type EMFEvent struct {
-	AWS         *AWSMetadata           `json:"_aws"`
-	OtherFields map[string]interface{} `json:",inline"`
-}
-
-func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
+func NewEMFAggregator(options *common.PluginOptions) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
-		AggregationPeriod: options.AggregationPeriod,
+		aggregationPeriod: options.AggregationPeriod,
 		metrics:           make(map[string]map[string]*histogram.Histogram),
 		metadataStore:     make(map[string]Metadata),
 	}
 
-	if options.OutputPath != "" {
-		err := aggregator.init_file_flush(options.OutputPath)
-		if err != nil {
-			return nil, err
-		}
-	} else if options.LogGroupName != "" && options.LogStreamName != "" {
-		err := aggregator.init_cloudwatch_flush(options.LogGroupName, options.LogStreamName, options.CloudWatchEndpoint, options.Protocol)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		return nil, fmt.Errorf("no output configured")
+	var err error
+
+	if aggregator.flusher, err = flush.InitFlusher(options); err != nil {
+		return nil, err
 	}
 
 	aggregator.Task = NewScheduledTask(options.AggregationPeriod, aggregator.flush)
@@ -116,57 +93,6 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 	a.stats.InputLength += length
 }
 
-func merge(old []MetricDefinition, new []MetricDefinition) {
-	for _, attempt := range new {
-		exists := false
-		for _, v := range old {
-			if v.Name == attempt.Name && v.Unit == attempt.Unit {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			old = append(old, attempt)
-		}
-	}
-
-}
-
-// we can only merge if the namespaces match and the dimension sets match
-// even if the namespaces match, if the dimensions aren't the same we risk
-// emitting metrics under dimensions they weren't intended to be emitted under
-func (def *ProjectionDefinition) attemptMerge(new ProjectionDefinition) bool {
-	if def.Namespace != new.Namespace {
-		return false
-	}
-	if utils.Every(def.Dimensions, func(val []string) bool {
-		return utils.Find(new.Dimensions, func(test []string) bool {
-			return strings.Join(val, ", ") == strings.Join(test, ", ")
-		}) != -1
-	}) {
-		merge(def.Metrics, new.Metrics)
-		return true
-	} else {
-		return false
-	}
-}
-
-func (m *AWSMetadata) merge(new *AWSMetadata) {
-	m.Timestamp = new.Timestamp
-	for _, attempt := range new.CloudWatchMetrics {
-		merged := false
-		for _, v := range m.CloudWatchMetrics {
-			merged = v.attemptMerge(attempt)
-			if merged {
-				break
-			}
-		}
-		if !merged {
-			m.CloudWatchMetrics = append(m.CloudWatchMetrics, attempt)
-		}
-	}
-}
-
 func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	// Create dimension hash for grouping
 	dimHash := createDimensionHash(emf.Dimensions)
@@ -182,7 +108,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 		if metadata.AWS == nil {
 			metadata.AWS = emf.AWS
 		} else {
-			metadata.AWS.merge(emf.AWS)
+			metadata.AWS.Merge(emf.AWS)
 		}
 
 		// Store extra fields
@@ -227,7 +153,7 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	outputEvents := make([]EMFEvent, 0, len(a.metrics))
+	outputEvents := make([]common.EMFEvent, 0, len(a.metrics))
 
 	for dimHash, metricMap := range a.metrics {
 		// Get the metadata for this dimension set
@@ -244,7 +170,7 @@ func (a *EMFAggregator) flush() error {
 		}
 
 		// Create output map with string keys
-		outputMap := EMFEvent{
+		outputMap := common.EMFEvent{
 			AWS:         metadata.AWS,
 			OtherFields: make(map[string]interface{}),
 		}
@@ -260,13 +186,8 @@ func (a *EMFAggregator) flush() error {
 			}
 		}
 
-		// Add all extra fields from metadata
 		for key, value := range metadata.Dimensions {
-			// Skip special fields we've already handled
-			if key != "_aws" {
-				// Convert any map[interface{}]interface{} to map[string]interface{}
-				outputMap.OtherFields[key] = convertToStringKeyMap(value)
-			}
+			outputMap.OtherFields[key] = value
 		}
 
 		outputEvents = append(outputEvents, outputMap)
@@ -277,7 +198,7 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	size, count, err := a.flusher(outputEvents)
+	size, count, err := a.flusher.Flush(outputEvents)
 
 	if err != nil {
 		return fmt.Errorf("error flushing: %w", err)
@@ -296,30 +217,6 @@ func (a *EMFAggregator) flush() error {
 
 	log.Info().Println("Completed Flushing")
 	return nil
-}
-
-// Helper function to convert interface{} maps to string key maps
-func convertToStringKeyMap(v interface{}) interface{} {
-	switch v := v.(type) {
-	case map[interface{}]interface{}:
-		strMap := make(map[string]interface{})
-		for key, value := range v {
-			strMap[fmt.Sprintf("%v", key)] = convertToStringKeyMap(value)
-		}
-		return strMap
-	case []interface{}:
-		for i, val := range v {
-			v[i] = convertToStringKeyMap(val)
-		}
-		return v
-	case map[string]interface{}:
-		for key, value := range v {
-			v[key] = convertToStringKeyMap(value)
-		}
-		return v
-	default:
-		return v
-	}
 }
 
 // Helper functions

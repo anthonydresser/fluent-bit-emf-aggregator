@@ -158,6 +158,7 @@ async function startEmitting(
             console.log(`Emitted batch of ${batchSize} metrics. Total: ${totalEmitted}`);
         } catch (error) {
             console.error('Error emitting metrics:', error);
+            process.exit(1)
         }
     }, intervalMs);
 }
@@ -172,6 +173,7 @@ async function main() {
         await startEmitting(batchSize, intervalMs, maxRunTimeMs);
     } catch (error) {
         console.error('Error in main execution:', error);
+        process.exit(1)
     }
 }
 

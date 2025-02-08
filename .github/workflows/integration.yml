@@ -1,0 +1,36 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start containers
+        run: docker compose up --build -d
+        
+      - name: Wait for completion and check exit codes
+        run: |
+          # Wait for emf-generator to finish
+          EXIT_CODE=$(docker wait emf-generator)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "emf-generator failed with exit code $EXIT_CODE"
+            docker compose logs
+            exit 1
+          fi
+          
+          # Check other containers' health
+          if [ "$(docker ps -q -f status=exited -f exitcode=1)" ]; then
+            echo "One or more containers exited with non-zero status"
+            docker compose logs
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
