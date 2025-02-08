@@ -12,6 +12,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+const (
+	// See: http://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutLogEvents.html
+	// stolen from https://github.com/aws/amazon-cloudwatch-logs-for-fluent-bit/blob/mainline/cloudwatch/cloudwatch.go
+	perEventBytes          = 26
+	maximumBytesPerPut     = 1048576
+	maximumLogEventsPerPut = 10000
+	maximumBytesPerEvent   = 1024 * 256 //256KB
+	maximumTimeSpanPerPut  = time.Hour * 24
+	truncatedSuffix        = "[Truncated...]"
+	maxGroupStreamLength   = 512
+)
+
 func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName string, endpoint string, protocol string) error {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
@@ -46,9 +58,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 
 	// Create batches that respect CloudWatch Logs limits
 	var currentBatch []types.InputLogEvent
-	var currentBatchSize int64 = 0
-	const maxBatchSize int64 = 1024 * 1024 // 1MB in bytes
-	const maxEventSize int64 = 256 * 1024  // 256KB in bytes
+	var currentBatchSize int = 0
 
 	for _, event := range events {
 		if event == nil {
@@ -60,16 +70,15 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 			return totalSize, totalCount, fmt.Errorf("failed to marshal event: %v", err)
 		}
 
-		marshalledString := string(marshalled)
-		eventSize := int64(len(marshalled))
+		data := string(marshalled)
 
-		if eventSize > maxEventSize {
-			log.Warn().Printf("dropping event that is too large to send, was %d", eventSize)
+		if (len(data) + perEventBytes) > maximumBytesPerEvent {
+			log.Warn().Printf("dropping event that is too large to send, was %d", len(data))
 			continue
 		}
 
 		// If adding this event would exceed batch size, flush current batch
-		if currentBatchSize+eventSize > maxBatchSize {
+		if (currentBatchSize+len(data)+perEventBytes) > maximumBytesPerPut || len(currentBatch) == maximumLogEventsPerPut {
 			size, err := a.send_cloudwatch_batch(currentBatch)
 			if err != nil {
 				return totalSize, totalCount, err
@@ -85,9 +94,9 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 		// Add event to current batch
 		currentBatch = append(currentBatch, types.InputLogEvent{
 			Timestamp: &timestamp,
-			Message:   &marshalledString,
+			Message:   &data,
 		})
-		currentBatchSize += eventSize
+		currentBatchSize += len(data) + perEventBytes
 	}
 
 	// Send final batch if not empty
