@@ -1,6 +1,12 @@
 package emf
 
+/*
+#include <stdlib.h>
+#include <stdint.h>
+#include "fluent-bit/flb_plugin.h"
+*/
 import (
+	"C"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,10 +14,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/fluent/fluent-bit-go/output"
 )
 
 type Stats struct {
@@ -23,13 +31,12 @@ type Stats struct {
 type EMFAggregator struct {
 	mu                sync.RWMutex
 	AggregationPeriod time.Duration
-	LastFlush         time.Time
 	// Map of dimension hash -> metric name -> aggregated values
 	metrics map[string]map[string]*AggregatedValue
 	// Store metadata and metric definitions
 	metadataStore   map[string]map[string]interface{}
 	definitionStore map[string]MetricDefinition
-	Stats           Stats
+	stats           Stats
 
 	// flushing helpers
 	flusher func([]map[string]interface{}) (int64, int64, error)
@@ -40,6 +47,7 @@ type EMFAggregator struct {
 	cloudwatch_client          *cloudwatchlogs.Client
 	cloudwatch_log_group_name  string
 	cloudwatch_log_stream_name string
+	Task                       *ScheduledTask
 }
 
 type AggregatedValue struct {
@@ -62,7 +70,6 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 		metrics:           make(map[string]map[string]*AggregatedValue),
 		metadataStore:     make(map[string]map[string]interface{}),
 		definitionStore:   make(map[string]MetricDefinition),
-		LastFlush:         time.Now(),
 	}
 
 	if options.OutputPath != "" {
@@ -78,6 +85,8 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	} else {
 		return nil, fmt.Errorf("no output configured")
 	}
+
+	aggregator.Task = NewScheduledTask(options.AggregationPeriod, aggregator.flush)
 
 	return aggregator, nil
 }
@@ -153,9 +162,36 @@ func (a *AggregatedValue) merge(metric MetricValue) {
 	}
 }
 
-func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
+// this is a helper function of sets to ensure we are locking appropriately
+func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
+	dec := output.NewDecoder(data, length)
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	for {
+		ret, _, record := output.GetRecord(dec)
+		if ret != 0 {
+			break
+		}
+
+		// Create EMF metric directly from record
+		emf, err := EmfFromRecord(record)
+
+		if err != nil {
+			log.Error().Printf("[ error] [emf-aggregator] failed to process EMF record: %v\n", err)
+			continue
+		}
+
+		// Aggregate the metric
+		a.AggregateMetric(emf)
+		a.stats.InputRecords++
+	}
+
+	a.stats.InputLength += int64(length)
+}
+
+func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 
 	// Create dimension hash for grouping
 	dimHash := createDimensionHash(emf.Dimensions)
@@ -195,10 +231,15 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	}
 }
 
-func (a *EMFAggregator) Flush() error {
+func (a *EMFAggregator) flush() error {
 	log.Info().Println("Flushing")
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if len(a.metrics) == 0 {
+		log.Info().Println("No metrics to flush, skipping")
+		return nil
+	}
 
 	outputEvents := make([]map[string]interface{}, 0)
 
@@ -258,17 +299,16 @@ func (a *EMFAggregator) Flush() error {
 		return fmt.Errorf("error flushing: %w", err)
 	}
 
-	size_percentage := int(float64(a.Stats.InputLength-size) / float64(a.Stats.InputLength) * 100)
-	count_percentage := int(float64(a.Stats.InputRecords-count) / float64(a.Stats.InputRecords) * 100)
+	size_percentage := int(float64(a.stats.InputLength-size) / float64(a.stats.InputLength) * 100)
+	count_percentage := int(float64(a.stats.InputRecords-count) / float64(a.stats.InputRecords) * 100)
 
-	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
+	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[string]map[string]*AggregatedValue)
 	a.metadataStore = make(map[string]map[string]interface{})
-	a.LastFlush = time.Now()
-	a.Stats.InputLength = 0
-	a.Stats.InputRecords = 0
+	a.stats.InputLength = 0
+	a.stats.InputRecords = 0
 
 	log.Info().Println("Completed Flushing")
 	return nil

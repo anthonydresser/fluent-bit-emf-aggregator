@@ -56,6 +56,8 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	output.FLBPluginSetContext(plugin, aggregator)
 
+	aggregator.Task.Start()
+
 	return output.FLB_OK
 }
 
@@ -66,36 +68,9 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 			log.Error().Printf("[ error] [emf-aggregator] Recovered in FLBPluginFlush: %v\n", r)
 		}
 	}()
-	dec := output.NewDecoder(data, int(length))
 	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)
 
-	for {
-		ret, _, record := output.GetRecord(dec)
-		if ret != 0 {
-			break
-		}
-
-		// Create EMF metric directly from record
-		emf, err := emf.EmfFromRecord(record)
-
-		if err != nil {
-			log.Error().Printf("[ error] [emf-aggregator] failed to process EMF record: %v\n", err)
-			continue
-		}
-
-		// Aggregate the metric
-		aggregator.AggregateMetric(emf)
-		aggregator.Stats.InputRecords++
-	}
-
-	aggregator.Stats.InputLength += int64(length)
-
-	// Check if it's time to flush
-	if time.Since(aggregator.LastFlush) >= aggregator.AggregationPeriod {
-		if err := aggregator.Flush(); err != nil {
-			log.Error().Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
-		}
-	}
+	aggregator.Aggregate(data, int(length))
 
 	return output.FLB_OK
 }
@@ -105,9 +80,7 @@ func FLBPluginExitCtx(ctx unsafe.Pointer) int {
 	// perform a last flush before we are killed
 	// I don't think this actually works
 	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)
-	if err := aggregator.Flush(); err != nil {
-		log.Error().Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
-	}
+	aggregator.Task.Stop()
 	return output.FLB_OK
 }
 
