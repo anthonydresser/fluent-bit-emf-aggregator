@@ -65,7 +65,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Printf("[ error] [emf-aggregator] Recovered in FLBPluginFlush: %v\n", r)
+			log.Error().Printf("Recovered in FLBPluginFlush: %v\n", r)
 		}
 	}()
 	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)

@@ -51,14 +51,14 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 	return nil
 }
 
-func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64, int64, error) {
+func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int, int, error) {
 	timestamp := time.Now().UnixMilli()
-	var totalSize int64 = 0
-	var totalCount int64 = 0
+	totalSize := 0
+	totalCount := 0
 
 	// Create batches that respect CloudWatch Logs limits
 	currentBatch := make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
-	var currentBatchSize int = 0
+	currentBatchSize := 0
 
 	for _, event := range events {
 		if event == nil {
@@ -73,7 +73,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 		data := string(marshalled)
 
 		if (len(data) + perEventBytes) > maximumBytesPerEvent {
-			log.Warn().Printf("dropping event that is too large to send, was %d", len(data))
+			log.Warn().Printf("dropping event that is too large to send, was %d\n", len(data))
 			continue
 		}
 
@@ -84,7 +84,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 				return totalSize, totalCount, err
 			}
 			totalSize += size
-			totalCount += int64(len(currentBatch))
+			totalCount += len(currentBatch)
 
 			// Reset batch
 			currentBatch = make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
@@ -106,14 +106,14 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 			return totalSize, totalCount, err
 		}
 		totalSize += size
-		totalCount += int64(len(currentBatch))
+		totalCount += len(currentBatch)
 	}
 
 	return totalSize, totalCount, nil
 }
 
 // Helper function to send a batch of events
-func (a *EMFAggregator) send_cloudwatch_batch(batch []types.InputLogEvent) (int64, error) {
+func (a *EMFAggregator) send_cloudwatch_batch(batch []types.InputLogEvent) (int, error) {
 	if len(batch) == 0 {
 		return 0, nil
 	}
@@ -128,9 +128,9 @@ func (a *EMFAggregator) send_cloudwatch_batch(batch []types.InputLogEvent) (int6
 		return 0, fmt.Errorf("failed to put log events: %v", err)
 	}
 
-	var batchSize int64 = 0
+	batchSize := 0
 	for _, event := range batch {
-		batchSize += int64(len(*event.Message))
+		batchSize += len(*event.Message)
 	}
 
 	return batchSize, nil

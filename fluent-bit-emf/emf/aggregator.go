@@ -23,8 +23,8 @@ import (
 )
 
 type Stats struct {
-	InputLength  int64
-	InputRecords int64
+	InputLength  int
+	InputRecords int
 }
 
 // Plugin context
@@ -38,7 +38,7 @@ type EMFAggregator struct {
 	stats         Stats
 
 	// flushing helpers
-	flusher func([]map[string]interface{}) (int64, int64, error)
+	flusher func([]map[string]interface{}) (int, int, error)
 	// file flushing
 	file_encoder *json.Encoder
 	file         *os.File
@@ -92,7 +92,7 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 func (a *AggregatedValue) merge(metric MetricValue) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Printf("Recovered in merge %v: %v\n%v", r, a, metric)
+			log.Error().Printf("Recovered in merge %v: %v\n%v\n", r, a, metric)
 		}
 	}()
 	if a.Value == nil && a.Values == nil {
@@ -177,7 +177,7 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 		emf, err := EmfFromRecord(record)
 
 		if err != nil {
-			log.Error().Printf("[ error] [emf-aggregator] failed to process EMF record: %v\n", err)
+			log.Error().Printf("failed to process EMF record: %v\n", err)
 			continue
 		}
 
@@ -186,7 +186,7 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 		a.stats.InputRecords++
 	}
 
-	a.stats.InputLength += int64(length)
+	a.stats.InputLength += length
 }
 
 func merge(old []MetricDefinition, new []MetricDefinition) {

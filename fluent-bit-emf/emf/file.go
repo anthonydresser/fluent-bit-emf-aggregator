@@ -30,14 +30,14 @@ func (a *EMFAggregator) init_file_flush(outputPath string) error {
 	return nil
 }
 
-func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int64, int64, error) {
+func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int, int, error) {
 	// Encode the map
 	size_prior, err := a.file.Stat()
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
 	}
 	// we have to encode these one at a time so they are individual events rather than a json array
-	count := int64(0)
+	count := 0
 	for _, event := range events {
 		if err := a.file_encoder.Encode(event); err != nil {
 			return 0, 0, fmt.Errorf("failed to write to file %s: %v", a.file.Name(), err)
@@ -55,5 +55,5 @@ func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int64, int6
 		return 0, 0, fmt.Errorf("failed to stat file %s: %v", a.file.Name(), err)
 	}
 
-	return size_after.Size() - size_prior.Size(), count, nil
+	return int(size_after.Size() - size_prior.Size()), count, nil
 }

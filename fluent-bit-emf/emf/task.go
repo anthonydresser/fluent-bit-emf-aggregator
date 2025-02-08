@@ -38,7 +38,7 @@ func (st *ScheduledTask) Start() {
 				return
 			case <-ticker.C:
 				if err := st.work(); err != nil {
-					log.Error().Printf("Encountered error during flush: %v", err)
+					log.Error().Printf("Encountered error during flush: %v\n", err)
 					continue
 				}
 			}
