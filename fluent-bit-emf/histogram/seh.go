@@ -1,11 +1,11 @@
-package emf
+package histogram
 
 import "math"
 
 type ExponentialHistogram struct {
-	buckets map[int]uint64
+	buckets map[int]uint
 	binSize float64
-	count   uint64
+	count   uint
 	sum     float64 // New sum field
 	min     float64
 	max     float64
@@ -17,13 +17,13 @@ const (
 
 type Bucket struct {
 	Value float64
-	Count int64
+	Count uint
 }
 
 // NewExponentialHistogram creates a new histogram with exponential buckets
 func NewExponentialHistogram() *ExponentialHistogram {
 	return &ExponentialHistogram{
-		buckets: make(map[int]uint64),
+		buckets: make(map[int]uint),
 		binSize: math.Log(1 + epsilon),
 		sum:     0,
 		min:     math.MaxFloat64,
@@ -45,7 +45,7 @@ func (h *ExponentialHistogram) ValueOf(bucket int) float64 {
 }
 
 // GetBucketCount returns the count for a specific bucket
-func (h *ExponentialHistogram) GetBucketCount(bucket int) uint64 {
+func (h *ExponentialHistogram) GetBucketCount(bucket int) uint {
 	return h.buckets[bucket]
 }
 
@@ -54,14 +54,14 @@ func (h *ExponentialHistogram) GetNonEmptyBuckets() []Bucket {
 	result := make([]Bucket, 0)
 	for bucket, count := range h.buckets {
 		if count > 0 {
-			result = append(result, Bucket{Value: h.ValueOf(bucket), Count: int64(count)})
+			result = append(result, Bucket{Value: h.ValueOf(bucket), Count: count})
 		}
 	}
 	return result
 }
 
 // Add adds a value to the histogram
-func (h *ExponentialHistogram) Add(value float64, count uint64) {
+func (h *ExponentialHistogram) Add(value float64, count uint) {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return
 	}

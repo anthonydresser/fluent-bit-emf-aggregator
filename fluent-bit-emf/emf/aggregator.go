@@ -16,13 +16,15 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/histogram"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
-type Stats struct {
+type InputStats struct {
 	InputLength  int
 	InputRecords int
 }
@@ -32,10 +34,10 @@ type EMFAggregator struct {
 	mu                sync.RWMutex
 	AggregationPeriod time.Duration
 	// Map of dimension hash -> metric name -> aggregated values
-	metrics map[string]map[string]*ExponentialHistogram
+	metrics map[string]map[string]*histogram.Histogram
 	// Store metadata and metric definitions
 	metadataStore map[string]map[string]interface{}
-	stats         Stats
+	stats         InputStats
 
 	// flushing helpers
 	flusher func([]map[string]interface{}) (int, int, error)
@@ -49,19 +51,10 @@ type EMFAggregator struct {
 	Task                       *ScheduledTask
 }
 
-type OutputValue struct {
-	Values []float64 `json:"Values,omitempty"`
-	Counts []int64   `json:"Counts,omitempty"`
-	Min    float64   `json:"Min,omitempty"`
-	Max    float64   `json:"Max,omitempty"`
-	Sum    float64   `json:"Sum,omitempty"`
-	Count  int64     `json:"Count,omitempty"`
-}
-
 func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		AggregationPeriod: options.AggregationPeriod,
-		metrics:           make(map[string]map[string]*ExponentialHistogram),
+		metrics:           make(map[string]map[string]*histogram.Histogram),
 		metadataStore:     make(map[string]map[string]interface{}),
 	}
 
@@ -136,8 +129,8 @@ func (def *ProjectionDefinition) attemptMerge(new ProjectionDefinition) bool {
 	if def.Namespace != new.Namespace {
 		return false
 	}
-	if every(def.Dimensions, func(val []string) bool {
-		return find(new.Dimensions, func(test []string) bool {
+	if utils.Every(def.Dimensions, func(val []string) bool {
+		return utils.Find(new.Dimensions, func(test []string) bool {
 			return strings.Join(val, ", ") == strings.Join(test, ", ")
 		}) != -1
 	}) {
@@ -191,13 +184,13 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 
 	// Initialize metric map for this dimension set if not exists
 	if _, exists := a.metrics[dimHash]; !exists {
-		a.metrics[dimHash] = make(map[string]*ExponentialHistogram)
+		a.metrics[dimHash] = make(map[string]*histogram.Histogram)
 	}
 
 	// Aggregate each metric
 	for name, value := range emf.MetricData {
 		if _, exists := a.metrics[dimHash][name]; !exists {
-			a.metrics[dimHash][name] = NewExponentialHistogram()
+			a.metrics[dimHash][name] = histogram.NewHistogram()
 		}
 
 		metric := a.metrics[dimHash][name]
@@ -206,7 +199,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 			metric.Add(*value.Value, 1)
 		} else {
 			for index, v := range value.Values {
-				metric.Add(v, uint64(value.Counts[index]))
+				metric.Add(v, uint(value.Counts[index]))
 			}
 		}
 	}
@@ -248,25 +241,12 @@ func (a *EMFAggregator) flush() error {
 
 		// Add all metric values
 		for name, value := range metricMap {
-			if value.count == 1 {
+			stats := value.Reduce()
+			if len(stats.Values) == 1 {
 				// Single value
-				outputMap[name] = value.max
+				outputMap[name] = stats.Max
 			} else {
-				buckets := value.GetNonEmptyBuckets()
-				values := make([]float64, len(buckets))
-				counts := make([]int64, len(buckets))
-				for i, bucket := range buckets {
-					values[i] = bucket.Value
-					counts[i] = bucket.Count
-				}
-				outputMap[name] = OutputValue{
-					Values: values,
-					Counts: counts,
-					Min:    value.min,
-					Max:    value.max,
-					Sum:    value.sum,
-					Count:  int64(value.count),
-				}
+				outputMap[name] = stats
 			}
 		}
 
@@ -299,7 +279,7 @@ func (a *EMFAggregator) flush() error {
 	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
-	a.metrics = make(map[string]map[string]*ExponentialHistogram)
+	a.metrics = make(map[string]map[string]*histogram.Histogram)
 	a.metadataStore = make(map[string]map[string]interface{})
 	a.stats.InputLength = 0
 	a.stats.InputRecords = 0

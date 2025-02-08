@@ -1,4 +1,4 @@
-package emf
+package histogram
 
 import (
 	"math"
@@ -26,8 +26,8 @@ func TestAdd(t *testing.T) {
 
 	testCases := []struct {
 		value    float64
-		count    uint64
-		expected uint64
+		count    uint
+		expected uint
 	}{
 		{1.0, 1, 1},
 		{2.0, 2, 2},
@@ -91,7 +91,7 @@ func TestMerge(t *testing.T) {
 
 	h1.Merge(h2)
 
-	expectedCount := uint64(4)
+	expectedCount := uint(4)
 	if h1.count != expectedCount {
 		t.Errorf("Expected merged count %v, got %v", expectedCount, h1.count)
 	}
