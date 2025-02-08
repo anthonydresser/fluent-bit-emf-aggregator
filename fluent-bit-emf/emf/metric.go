@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
 type AWSMetadata struct {
@@ -96,7 +97,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 								log.Warn().Println("Skipping metric: Metric definition had no Namespace field")
 								continue
 							} else {
-								aws.CloudWatchMetrics[i].Namespace = toString(ns)
+								aws.CloudWatchMetrics[i].Namespace = utils.ToString(ns)
 							}
 
 							// Parse Dimensions
@@ -116,8 +117,8 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 										} else {
 											dimStrings := make([]string, len(dimSet))
 											for k, d := range dimSet {
-												dimStrings[k] = toString(d)
-												emf.DimensionSet[toString(d)] = true
+												dimStrings[k] = utils.ToString(d)
+												emf.DimensionSet[utils.ToString(d)] = true
 											}
 											// we sort here so we can do easy comparisons later
 											sort.Strings(dimStrings)
@@ -143,8 +144,8 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 											log.Warn().Printf("Skipping metric: Metric was not a map, was %v\n", metric)
 											continue
 										} else {
-											aws.CloudWatchMetrics[i].Metrics[j].Name = toString(m["Name"])
-											aws.CloudWatchMetrics[i].Metrics[j].Unit = toString(m["Unit"])
+											aws.CloudWatchMetrics[i].Metrics[j].Name = utils.ToString(m["Name"])
+											aws.CloudWatchMetrics[i].Metrics[j].Unit = utils.ToString(m["Unit"])
 										}
 									}
 								}
@@ -158,7 +159,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	}
 
 	for key, value := range record {
-		strKey := toString(key)
+		strKey := utils.ToString(key)
 		switch strKey {
 		case "_aws":
 			continue
@@ -183,7 +184,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 
 			if !isMetric {
 				if _, present := emf.DimensionSet[strKey]; present {
-					emf.Dimensions[strKey] = toString(value)
+					emf.Dimensions[strKey] = utils.ToString(value)
 				}
 			}
 		}
@@ -201,44 +202,32 @@ func parseMetricValue(value interface{}) MetricValue {
 		if values, ok := v["Values"].([]interface{}); ok {
 			mv.Values = make([]float64, len(values))
 			for i, val := range values {
-				mv.Values[i] = convertToFloat64(val)
+				mv.Values[i] = utils.ConvertToFloat64(val)
 			}
 		}
 		if counts, ok := v["Counts"].([]interface{}); ok {
 			mv.Counts = make([]int64, len(counts))
 			for i, count := range counts {
-				mv.Counts[i] = int64(convertToFloat64(count))
+				mv.Counts[i] = int64(utils.ConvertToFloat64(count))
 			}
 		}
 		if min, ok := v["Min"]; ok {
-			mv.Min = convertToFloat64(min)
+			mv.Min = utils.ConvertToFloat64(min)
 		}
 		if max, ok := v["Max"]; ok {
-			mv.Max = convertToFloat64(max)
+			mv.Max = utils.ConvertToFloat64(max)
 		}
 		if sum, ok := v["Sum"]; ok {
-			mv.Sum = convertToFloat64(sum)
+			mv.Sum = utils.ConvertToFloat64(sum)
 		}
 		if count, ok := v["Count"]; ok {
-			mv.Count = int64(convertToFloat64(count))
+			mv.Count = int64(utils.ConvertToFloat64(count))
 		}
 	default:
 		// Handle simple value
-		value := convertToFloat64(v)
+		value := utils.ConvertToFloat64(v)
 		mv.Value = &value
 	}
 
 	return mv
-}
-
-// Helper function to convert interface{} to string
-func toString(v interface{}) string {
-	switch v := v.(type) {
-	case string:
-		return v
-	case []byte:
-		return string(v)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
 }

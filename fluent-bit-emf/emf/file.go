@@ -30,7 +30,7 @@ func (a *EMFAggregator) init_file_flush(outputPath string) error {
 	return nil
 }
 
-func (a *EMFAggregator) flush_file(events []map[string]interface{}) (int, int, error) {
+func (a *EMFAggregator) flush_file(events []EMFEvent) (int, int, error) {
 	// Encode the map
 	size_prior, err := a.file.Stat()
 	if err != nil {

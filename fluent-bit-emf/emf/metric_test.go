@@ -3,6 +3,8 @@ package emf
 import (
 	"reflect"
 	"testing"
+
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
 func TestEmfFromRecord_ValidInput(t *testing.T) {
@@ -162,7 +164,7 @@ func TestToString(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := toString(tc.input)
+			result := utils.ToString(tc.input)
 			if result != tc.expected {
 				t.Errorf("Expected %s, got %s", tc.expected, result)
 			}
