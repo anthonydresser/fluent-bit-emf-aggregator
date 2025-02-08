@@ -3,13 +3,13 @@ package emf
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
@@ -82,6 +82,77 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	return aggregator, nil
 }
 
+func (a *AggregatedValue) merge(metric MetricValue) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Printf("Recovered in merge %v: %v\n%v", r, a, metric)
+		}
+	}()
+	if a.Value == nil && a.Values == nil {
+		// this is easy, just initialize ourselves with the metric
+		a.Count = metric.Count
+		a.Counts = metric.Counts
+		a.Max = metric.Max
+		a.Min = metric.Min
+		a.Sum = metric.Sum
+		a.Value = metric.Value
+		a.Values = metric.Values
+		return
+	}
+	if a.Value != nil {
+		// the simpliest thing we can do is initialize a full object with ourselves then call merge again to do a full merge
+		a.Count = 1
+		a.Counts = []int64{1}
+		a.Max = *a.Value
+		a.Min = *a.Value
+		a.Sum = *a.Value
+		// this has to happen first so we destroy our reference AFTER we initialize
+		a.Values = []float64{*a.Value}
+		a.Value = nil
+		a.merge(metric)
+		return
+	}
+	// at this point we know we are a fulling initialized object
+	if metric.Value != nil {
+		// the easiest thing to do here would be to create a new full metricValue object and call merge with that
+		metric.Count = 1
+		metric.Counts = []int64{1}
+		metric.Max = *metric.Value
+		metric.Min = *metric.Value
+		metric.Sum = *metric.Value
+		// this has to happen first so we destroy our reference AFTER we initialize
+		metric.Values = []float64{*metric.Value}
+		metric.Value = nil
+		a.merge(metric)
+		return
+	}
+	// at this point we know we are trying to merge 2 full objects
+	// lets just make the assumption that our aggregator value has more entries, this will be the case 99 percent of the time
+	for index, value := range metric.Values {
+		// check if we have this value already
+		existingIndex := -1
+		for i, testVal := range a.Values {
+			if value == testVal {
+				existingIndex = i
+				break
+			}
+		}
+		if existingIndex != -1 {
+			// we have already seen this value, all we need to do is increment
+			a.Counts[existingIndex] += metric.Counts[index]
+			// we can also do some short circuiting since we know it won't cause a new max or min
+		} else {
+			// this is new need to add it
+			a.Values = append(a.Values, value)
+			a.Counts = append(a.Counts, metric.Counts[index])
+			a.Min = min(a.Min, value)
+			a.Max = max(a.Max, value)
+		}
+		a.Count++
+		a.Sum += value
+	}
+}
+
 func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -120,108 +191,12 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 
 		metric := a.metrics[dimHash][name]
 
-		// Handle different value types
-		if value.Values != nil {
-			if metric.Value == nil && metric.Values == nil {
-				// first time we are seeing this metric
-				metric.Values = value.Values
-				metric.Count = value.Count
-				metric.Counts = value.Counts
-				metric.Sum = value.Sum
-				metric.Min = value.Min
-				metric.Max = value.Max
-			} else if metric.Value != nil {
-				// we have seen this metric before, but only the value was set
-				// convert to struct and aggregate
-				index := -1
-				// find the existing value in the new values
-				for existingIndex := range value.Values {
-					if value.Values[existingIndex] == *metric.Value {
-						index = existingIndex
-					}
-				}
-				metric.Values = value.Values
-				metric.Counts = value.Counts
-
-				if index != -1 {
-					metric.Counts[index]++
-				} else {
-					metric.Values = append(metric.Values, *metric.Value)
-					metric.Counts = append(metric.Counts, 1)
-				}
-				metric.Sum = *metric.Value + value.Sum
-				metric.Count = 1 + value.Count
-				metric.Min = min(value.Min, *metric.Value)
-				metric.Max = max(value.Max, *metric.Value)
-				metric.Value = nil
-			} else {
-				// we have seen this metric before and it is already in the form of a struct
-				for _, v := range value.Values {
-					index := -1
-					for existingIndex := range metric.Values {
-						if metric.Values[existingIndex] == v {
-							index = existingIndex
-						}
-					}
-					if index != -1 {
-						metric.Counts[index]++
-					} else {
-						metric.Values = append(metric.Values, v)
-						metric.Counts = append(metric.Counts, 1)
-					}
-					metric.Sum += v
-					metric.Count++
-					metric.Min = min(metric.Min, v)
-					metric.Max = max(metric.Max, v)
-					metric.Value = nil
-				}
-			}
-		} else if value.Value != nil {
-			v := convertToFloat64(value.Value)
-			if metric.Value == nil && metric.Values == nil {
-				// we have no seen this value before
-				metric.Value = &v
-			} else if metric.Value != nil {
-				// we have seen this metric before but in the form of a number
-				metric.Counts = make([]int64, 0)
-				metric.Values = make([]float64, 0)
-				if *metric.Value == v {
-					metric.Values = append(metric.Values, v)
-					metric.Counts = append(metric.Counts, 2)
-				} else {
-					metric.Values = append(metric.Values, v, *metric.Value)
-					metric.Counts = append(metric.Counts, 1, 1)
-				}
-				metric.Sum = *metric.Value + v
-				metric.Min = min(*metric.Value, v)
-				metric.Max = max(*metric.Value, v)
-				metric.Count = 2
-				metric.Value = nil
-			} else {
-				// we have seen this number before and we have a struct already
-				index := -1
-				for existingIndex := range metric.Values {
-					if metric.Values[existingIndex] == v {
-						index = existingIndex
-					}
-				}
-				if index != -1 {
-					metric.Counts[index]++
-				} else {
-					metric.Values = append(metric.Values, v)
-					metric.Counts = append(metric.Counts, 1)
-				}
-				metric.Sum += v
-				metric.Count++
-				metric.Min = min(metric.Min, v)
-				metric.Max = max(metric.Max, v)
-			}
-		}
+		metric.merge(value)
 	}
 }
 
 func (a *EMFAggregator) Flush() error {
-	log.Println("[ info] [emf-aggregator] Flushing")
+	log.Info().Println("Flushing")
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -231,7 +206,7 @@ func (a *EMFAggregator) Flush() error {
 		// Get the metadata for this dimension set
 		metadata, exists := a.metadataStore[dimHash]
 		if !exists {
-			log.Printf("[ warn] [emf-aggregator] No metadata found for dimension hash %s\n", dimHash)
+			log.Warn().Printf("No metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -239,7 +214,7 @@ func (a *EMFAggregator) Flush() error {
 		awsMetadata, hasAWS := metadata["_aws"].(*AWSMetadata)
 		// Skip if no AWS metadata is available
 		if !hasAWS {
-			log.Printf("[ warn] [emf-aggregator] No AWS metadata found for dimension hash %s\n", dimHash)
+			log.Warn().Printf("No AWS metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
@@ -273,7 +248,7 @@ func (a *EMFAggregator) Flush() error {
 	}
 
 	if len(outputEvents) == 0 {
-		log.Println("[ warn] [emf-aggregator] No events to flush, skipping")
+		log.Warn().Println("No events to flush, skipping")
 		return nil
 	}
 
@@ -286,7 +261,7 @@ func (a *EMFAggregator) Flush() error {
 	size_percentage := int(float64(a.Stats.InputLength-size) / float64(a.Stats.InputLength) * 100)
 	count_percentage := int(float64(a.Stats.InputRecords-count) / float64(a.Stats.InputRecords) * 100)
 
-	log.Printf("[ info] [emf-aggregator] Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
+	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.Stats.InputLength, size, size_percentage, a.Stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[string]map[string]*AggregatedValue)
@@ -295,7 +270,7 @@ func (a *EMFAggregator) Flush() error {
 	a.Stats.InputLength = 0
 	a.Stats.InputRecords = 0
 
-	log.Println("[ info] [emf-aggregator] Completed Flushing")
+	log.Info().Println("Completed Flushing")
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
@@ -47,6 +48,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 	var currentBatch []types.InputLogEvent
 	var currentBatchSize int64 = 0
 	const maxBatchSize int64 = 1024 * 1024 // 1MB in bytes
+	const maxEventSize int64 = 256 * 1024  // 256KB in bytes
 
 	for _, event := range events {
 		if event == nil {
@@ -59,10 +61,10 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int64
 		}
 
 		marshalledString := string(marshalled)
-		eventSize := int64(len(marshalledString))
+		eventSize := int64(len(marshalled))
 
-		// If single event is too large, skip it
-		if eventSize > maxBatchSize {
+		if eventSize > maxEventSize {
+			log.Warn().Printf("dropping event that is too large to send, was %d", eventSize)
 			continue
 		}
 

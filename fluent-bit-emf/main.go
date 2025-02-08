@@ -7,33 +7,24 @@ package main
 */
 import (
 	"C"
-	"fmt"
-	"log"
 	"time"
 	"unsafe"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/emf"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/options"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
-type CustomWriter struct{}
-
-func (f CustomWriter) Write(bytes []byte) (int, error) {
-	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
-}
-
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	log.SetFlags(0)
-	log.SetOutput(new(CustomWriter))
-	log.Println("[ info] [emf-aggregator] Enter FLBPluginRegister")
+	log.Init("emf-aggregator", 0)
 	return output.FLBPluginRegister(def, "emf_aggregator", "EMF File Aggregator")
 }
 
 //export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
-	log.Println("[ info] [emf-aggregator] Initializing")
+	log.Info().Println("Initializing")
 
 	options := options.PluginOptions{}
 
@@ -45,13 +36,13 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
 	if period == "" {
-		log.Println("[ warn] [emf-aggregator] AggregationPeriod not set, defaulting to 1m")
+		log.Info().Println("AggregationPeriod not set, defaulting to 1m")
 		period = "1m"
 	}
 
 	aggregationPeriod, err := time.ParseDuration(period)
 	if err != nil {
-		log.Printf("[ error] [emf-aggregator] invalid aggregation period: %v\n", err)
+		log.Info().Printf("invalid aggregation period: %v\n", err)
 		return output.FLB_ERROR
 	}
 
@@ -59,7 +50,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	aggregator, err := emf.NewEMFAggregator(options)
 	if err != nil {
-		log.Printf("[ error] [emf-aggregator] failed to create EMFAggregator: %v\n", err)
+		log.Info().Printf("failed to create EMFAggregator: %v\n", err)
 		return output.FLB_ERROR
 	}
 
@@ -72,7 +63,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[ error] [emf-aggregator] Recovered in FLBPluginFlush: %v\n", r)
+			log.Error().Printf("[ error] [emf-aggregator] Recovered in FLBPluginFlush: %v\n", r)
 		}
 	}()
 	dec := output.NewDecoder(data, int(length))
@@ -88,7 +79,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 		emf, err := emf.EmfFromRecord(record)
 
 		if err != nil {
-			log.Printf("[ error] [emf-aggregator] failed to process EMF record: %v\n", err)
+			log.Error().Printf("[ error] [emf-aggregator] failed to process EMF record: %v\n", err)
 			continue
 		}
 
@@ -102,7 +93,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	// Check if it's time to flush
 	if time.Since(aggregator.LastFlush) >= aggregator.AggregationPeriod {
 		if err := aggregator.Flush(); err != nil {
-			log.Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
+			log.Error().Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
 		}
 	}
 
@@ -115,7 +106,7 @@ func FLBPluginExitCtx(ctx unsafe.Pointer) int {
 	// I don't think this actually works
 	aggregator := output.FLBPluginGetContext(ctx).(*emf.EMFAggregator)
 	if err := aggregator.Flush(); err != nil {
-		log.Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
+		log.Error().Printf("[ error] [emf-aggregator] failed to flush metrics: %v\n", err)
 	}
 	return output.FLB_OK
 }
