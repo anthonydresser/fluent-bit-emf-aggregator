@@ -197,7 +197,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	// Aggregate each metric
 	for name, value := range emf.MetricData {
 		if _, exists := a.metrics[dimHash][name]; !exists {
-			a.metrics[dimHash][name] = NewExponentialHistogram(1)
+			a.metrics[dimHash][name] = NewExponentialHistogram()
 		}
 
 		metric := a.metrics[dimHash][name]

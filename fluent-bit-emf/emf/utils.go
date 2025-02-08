@@ -23,20 +23,6 @@ func convertToFloat64(v interface{}) float64 {
 	return 0
 }
 
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func find[T any](array []T, test func(T) bool) int {
 	found := -1
 	for i, v := range array {

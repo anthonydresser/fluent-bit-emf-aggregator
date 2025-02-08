@@ -21,7 +21,7 @@ type Bucket struct {
 }
 
 // NewExponentialHistogram creates a new histogram with exponential buckets
-func NewExponentialHistogram(base float64) *ExponentialHistogram {
+func NewExponentialHistogram() *ExponentialHistogram {
 	return &ExponentialHistogram{
 		buckets: make(map[int]uint64),
 		binSize: math.Log(1 + epsilon),
