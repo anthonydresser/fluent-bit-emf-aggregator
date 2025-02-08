@@ -36,3 +36,23 @@ func max(a, b float64) float64 {
 	}
 	return b
 }
+
+func find[T any](array []T, test func(T) bool) int {
+	found := -1
+	for i, v := range array {
+		if test(v) {
+			found = i
+			break
+		}
+	}
+	return found
+}
+
+func every[T any](array []T, test func(T) bool) bool {
+	for _, v := range array {
+		if !test(v) {
+			return false
+		}
+	}
+	return true
+}

@@ -34,9 +34,8 @@ type EMFAggregator struct {
 	// Map of dimension hash -> metric name -> aggregated values
 	metrics map[string]map[string]*AggregatedValue
 	// Store metadata and metric definitions
-	metadataStore   map[string]map[string]interface{}
-	definitionStore map[string]MetricDefinition
-	stats           Stats
+	metadataStore map[string]map[string]interface{}
+	stats         Stats
 
 	// flushing helpers
 	flusher func([]map[string]interface{}) (int64, int64, error)
@@ -69,7 +68,6 @@ func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 		AggregationPeriod: options.AggregationPeriod,
 		metrics:           make(map[string]map[string]*AggregatedValue),
 		metadataStore:     make(map[string]map[string]interface{}),
-		definitionStore:   make(map[string]MetricDefinition),
 	}
 
 	if options.OutputPath != "" {
@@ -191,8 +189,58 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 	a.stats.InputLength += int64(length)
 }
 
-func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
+func merge(old []MetricDefinition, new []MetricDefinition) {
+	for _, attempt := range new {
+		exists := false
+		for _, v := range old {
+			if v.Name == attempt.Name && v.Unit == attempt.Unit {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			old = append(old, attempt)
+		}
+	}
 
+}
+
+// we can only merge if the namespaces match and the dimension sets match
+// even if the namespaces match, if the dimensions aren't the same we risk
+// emitting metrics under dimensions they weren't intended to be emitted under
+func (def *ProjectionDefinition) attemptMerge(new ProjectionDefinition) bool {
+	if def.Namespace != new.Namespace {
+		return false
+	}
+	if every(def.Dimensions, func(val []string) bool {
+		return find(new.Dimensions, func(test []string) bool {
+			return strings.Join(val, ", ") == strings.Join(test, ", ")
+		}) != -1
+	}) {
+		merge(def.Metrics, new.Metrics)
+		return true
+	} else {
+		return false
+	}
+}
+
+func (m *AWSMetadata) merge(new AWSMetadata) {
+	m.Timestamp = new.Timestamp
+	for _, attempt := range new.CloudWatchMetrics {
+		merged := false
+		for _, v := range m.CloudWatchMetrics {
+			merged = v.attemptMerge(attempt)
+			if merged {
+				break
+			}
+		}
+		if !merged {
+			m.CloudWatchMetrics = append(m.CloudWatchMetrics, attempt)
+		}
+	}
+}
+
+func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	// Create dimension hash for grouping
 	dimHash := createDimensionHash(emf.Dimensions)
 
@@ -204,6 +252,9 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	// Store AWS metadata
 	if emf.AWS != nil {
 		a.metadataStore[dimHash]["_aws"] = emf.AWS
+	} else {
+		metadata := a.metadataStore[dimHash]["_aws"].(AWSMetadata)
+		metadata.merge(*emf.AWS)
 	}
 
 	// Store extra fields
