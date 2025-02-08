@@ -55,6 +55,27 @@ type MockCloudWatchLogs struct {
 
 type CustomWriter struct{}
 
+type Metric struct {
+	Name              string `json:"Name"`
+	Unit              string `json:"Unit"`
+	StorageResolution uint   `json:"StorageResolution,omitempty"`
+}
+
+type CloudWatchMetric struct {
+	Dimensions [][]string `json:"Dimensions"`
+	Metrics    []Metric   `json:"Metrics"`
+}
+
+type AWSMetadata struct {
+	Timestamp         uint               `json:"Timestamp"`
+	CloudWatchMetrics []CloudWatchMetric `json:"CloudWatchMetrics"`
+}
+
+type EMFEvent struct {
+	AWS         AWSMetadata            `json:"_aws"`
+	OtherFields map[string]interface{} `json:",inline"`
+}
+
 func (f CustomWriter) Write(bytes []byte) (int, error) {
 	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
 }
@@ -113,6 +134,34 @@ func (m *MockCloudWatchLogs) handleCreateLogStream(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(resp)
 }
 
+func validateEvent(event EMFEvent) error {
+	expectedDimensions := make(map[string]struct{})
+	expectedMetrics := make(map[string]struct{})
+
+	for _, metric := range event.AWS.CloudWatchMetrics {
+		for _, dimension := range metric.Dimensions {
+			for _, value := range dimension {
+				expectedDimensions[value] = struct{}{}
+			}
+		}
+		for _, metric := range metric.Metrics {
+			expectedMetrics[metric.Name] = struct{}{}
+		}
+	}
+
+	for key := range expectedMetrics {
+		if _, exists := event.OtherFields[key]; !exists {
+			return fmt.Errorf("missing metric %s", key)
+		}
+	}
+	for key := range expectedDimensions {
+		if _, exists := event.OtherFields[key]; !exists {
+			return fmt.Errorf("missing dimension %s", key)
+		}
+	}
+	return nil
+}
+
 func (m *MockCloudWatchLogs) handlePutLogEvents(w http.ResponseWriter, r *http.Request) {
 	if !validateAWSHeaders(w, r) {
 		return
@@ -146,6 +195,21 @@ func (m *MockCloudWatchLogs) handlePutLogEvents(w http.ResponseWriter, r *http.R
 	streamKey := fmt.Sprintf("%s:%s", req.LogGroupName, req.LogStreamName)
 	stream.Events = append(stream.Events, req.LogEvents...)
 	rawEvents, err := json.Marshal(req.LogEvents)
+
+	for _, event := range req.LogEvents {
+		var emfEvent EMFEvent
+		if err := json.Unmarshal([]byte(event.Message), &emfEvent); err != nil {
+			sendErrorResponse(w, "InternalFailure", err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := validateEvent(emfEvent); err != nil {
+			sendErrorResponse(w, "InternalFailure", err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	log.Println("[ info] All events passed validation")
+
 	if err != nil {
 		sendErrorResponse(w, "InternalFailure", err.Error(), http.StatusInternalServerError)
 		return

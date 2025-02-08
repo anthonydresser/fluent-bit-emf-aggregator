@@ -51,8 +51,7 @@ func (a *EMFAggregator) init_cloudwatch_flush(groupName string, streamName strin
 	return nil
 }
 
-func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int, int, error) {
-	timestamp := time.Now().UnixMilli()
+func (a *EMFAggregator) flush_cloudwatch(events []EMFEvent) (int, int, error) {
 	totalSize := 0
 	totalCount := 0
 
@@ -61,10 +60,6 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int, 
 	currentBatchSize := 0
 
 	for _, event := range events {
-		if event == nil {
-			continue
-		}
-
 		marshalled, err := json.Marshal(event)
 		if err != nil {
 			return totalSize, totalCount, fmt.Errorf("failed to marshal event: %v", err)
@@ -91,6 +86,7 @@ func (a *EMFAggregator) flush_cloudwatch(events []map[string]interface{}) (int, 
 			currentBatchSize = 0
 		}
 
+		timestamp := time.Now().UnixMilli()
 		// Add event to current batch
 		currentBatch = append(currentBatch, types.InputLogEvent{
 			Timestamp: &timestamp,

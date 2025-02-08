@@ -36,11 +36,11 @@ type EMFAggregator struct {
 	// Map of dimension hash -> metric name -> aggregated values
 	metrics map[string]map[string]*histogram.Histogram
 	// Store metadata and metric definitions
-	metadataStore map[string]map[string]interface{}
+	metadataStore map[string]Metadata
 	stats         InputStats
 
 	// flushing helpers
-	flusher func([]map[string]interface{}) (int, int, error)
+	flusher func([]EMFEvent) (int, int, error)
 	// file flushing
 	file_encoder *json.Encoder
 	file         *os.File
@@ -51,11 +51,21 @@ type EMFAggregator struct {
 	Task                       *ScheduledTask
 }
 
+type Metadata struct {
+	AWS        *AWSMetadata
+	Dimensions map[string]string
+}
+
+type EMFEvent struct {
+	AWS         *AWSMetadata           `json:"_aws"`
+	OtherFields map[string]interface{} `json:",inline"`
+}
+
 func NewEMFAggregator(options options.PluginOptions) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		AggregationPeriod: options.AggregationPeriod,
 		metrics:           make(map[string]map[string]*histogram.Histogram),
-		metadataStore:     make(map[string]map[string]interface{}),
+		metadataStore:     make(map[string]Metadata),
 	}
 
 	if options.OutputPath != "" {
@@ -141,7 +151,7 @@ func (def *ProjectionDefinition) attemptMerge(new ProjectionDefinition) bool {
 	}
 }
 
-func (m *AWSMetadata) merge(new AWSMetadata) {
+func (m *AWSMetadata) merge(new *AWSMetadata) {
 	m.Timestamp = new.Timestamp
 	for _, attempt := range new.CloudWatchMetrics {
 		merged := false
@@ -162,23 +172,25 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	dimHash := createDimensionHash(emf.Dimensions)
 
 	// Initialize or update metadata store
-	if _, exists := a.metadataStore[dimHash]; !exists {
-		a.metadataStore[dimHash] = make(map[string]interface{})
-	}
-
-	// Store AWS metadata
-	if emf.AWS != nil {
-		a.metadataStore[dimHash]["_aws"] = emf.AWS
+	if metadata, exists := a.metadataStore[dimHash]; !exists {
+		a.metadataStore[dimHash] = Metadata{
+			AWS:        emf.AWS,
+			Dimensions: emf.Dimensions,
+		}
 	} else {
-		metadata := a.metadataStore[dimHash]["_aws"].(AWSMetadata)
-		metadata.merge(*emf.AWS)
-	}
+		// Store AWS metadata
+		if metadata.AWS == nil {
+			metadata.AWS = emf.AWS
+		} else {
+			metadata.AWS.merge(emf.AWS)
+		}
 
-	// Store extra fields
-	for key, value := range emf.Dimensions {
-		// Only update if the field doesn't exist or is empty
-		if _, exists := a.metadataStore[dimHash][key]; !exists {
-			a.metadataStore[dimHash][key] = value
+		// Store extra fields
+		for key, value := range emf.Dimensions {
+			// Only update if the field doesn't exist or is empty
+			if _, exists := metadata.Dimensions[key]; !exists {
+				metadata.Dimensions[key] = value
+			}
 		}
 	}
 
@@ -215,7 +227,7 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	outputEvents := make([]map[string]interface{}, 0, len(a.metrics))
+	outputEvents := make([]EMFEvent, 0, len(a.metrics))
 
 	for dimHash, metricMap := range a.metrics {
 		// Get the metadata for this dimension set
@@ -225,37 +237,35 @@ func (a *EMFAggregator) flush() error {
 			continue
 		}
 
-		// Convert AWS metadata to proper types
-		awsMetadata, hasAWS := metadata["_aws"].(*AWSMetadata)
 		// Skip if no AWS metadata is available
-		if !hasAWS {
+		if metadata.AWS == nil {
 			log.Warn().Printf("No AWS metadata found for dimension hash %s\n", dimHash)
 			continue
 		}
 
 		// Create output map with string keys
-		outputMap := make(map[string]interface{})
-
-		// Add AWS metadata
-		outputMap["_aws"] = awsMetadata
+		outputMap := EMFEvent{
+			AWS:         metadata.AWS,
+			OtherFields: make(map[string]interface{}),
+		}
 
 		// Add all metric values
 		for name, value := range metricMap {
 			stats := value.Reduce()
 			if len(stats.Values) == 1 {
 				// Single value
-				outputMap[name] = stats.Max
+				outputMap.OtherFields[name] = stats.Max
 			} else {
-				outputMap[name] = stats
+				outputMap.OtherFields[name] = stats
 			}
 		}
 
 		// Add all extra fields from metadata
-		for key, value := range metadata {
+		for key, value := range metadata.Dimensions {
 			// Skip special fields we've already handled
 			if key != "_aws" {
 				// Convert any map[interface{}]interface{} to map[string]interface{}
-				outputMap[key] = convertToStringKeyMap(value)
+				outputMap.OtherFields[key] = convertToStringKeyMap(value)
 			}
 		}
 
@@ -280,7 +290,7 @@ func (a *EMFAggregator) flush() error {
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[string]map[string]*histogram.Histogram)
-	a.metadataStore = make(map[string]map[string]interface{})
+	a.metadataStore = make(map[string]Metadata)
 	a.stats.InputLength = 0
 	a.stats.InputRecords = 0
 
