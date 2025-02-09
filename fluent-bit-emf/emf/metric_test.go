@@ -96,6 +96,10 @@ func TestEmfFromRecord_InvalidInput(t *testing.T) {
 }
 
 func TestParseMetricValue(t *testing.T) {
+	expectedMin := 1.0
+	expectedMax := 2.0
+	expectedSum := 3.0
+	expectedCount := uint(2)
 	testCases := []struct {
 		name     string
 		input    interface{}
@@ -120,11 +124,11 @@ func TestParseMetricValue(t *testing.T) {
 			},
 			expected: MetricValue{
 				Values: []float64{1.0, 2.0},
-				Counts: []int64{1, 1},
-				Min:    1.0,
-				Max:    2.0,
-				Sum:    3.0,
-				Count:  2,
+				Counts: []uint{1, 1},
+				Min:    &expectedMin,
+				Max:    &expectedMax,
+				Sum:    &expectedSum,
+				Count:  &expectedCount,
 			},
 		},
 	}
