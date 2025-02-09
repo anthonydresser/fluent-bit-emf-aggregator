@@ -25,9 +25,12 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Build docker-compose
+      - name: Build
         # Before the cache, it was "run: docker compose build".
         run: docker buildx bake --file compose.yml --file docker-compose-cache.json
+    
+      - name: Run
+        run: docker compose up -d
         
       - name: Wait for completion and check exit codes
         run: |
