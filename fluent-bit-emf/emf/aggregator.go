@@ -139,6 +139,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 			if value.Max != nil && value.Min == value.Max {
 				metric.Add(*value.Max, *value.Count)
 			} else {
+				// at this point it shouldn't happen, but just in case
 				log.Warn().Printf("Invalid metric value found for metric %s: %v\n", name, value)
 				continue
 			}

@@ -157,6 +157,10 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 						if metric.Name == strKey {
 							isMetric = true
 							metricValue := parseMetricValue(value)
+							if !validateMetric(&metricValue) {
+								log.Warn().Printf("Found invalid metric %s with value %v", strKey, metricValue)
+								continue
+							}
 							emf.MetricData[strKey] = metricValue
 							break
 						}
@@ -219,4 +223,16 @@ func parseMetricValue(value interface{}) MetricValue {
 	}
 
 	return mv
+}
+
+func validateMetric(value *MetricValue) bool {
+	if value.Value != nil {
+		return true
+	} else if value.Values != nil {
+		return true
+	} else if value.Max != nil && value.Count != nil && value.Max == value.Min {
+		return true
+	} else {
+		return false
+	}
 }
