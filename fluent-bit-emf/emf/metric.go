@@ -157,6 +157,9 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 						if metric.Name == strKey {
 							isMetric = true
 							metricValue := parseMetricValue(value)
+							if metricValue.Value == nil && metricValue.Values == nil {
+								log.Warn().Printf("Metric %s parsed incorrectly %v", strKey, metricValue)
+							}
 							emf.MetricData[strKey] = metricValue
 							break
 						}
