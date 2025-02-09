@@ -178,7 +178,7 @@ func (a *EMFAggregator) flush() error {
 
 		// Create output map with string keys
 		outputMap := common.EMFEvent{
-			AWS:         metadata.AWS,
+			// AWS:         metadata.AWS,
 			OtherFields: make(map[string]interface{}),
 		}
 
