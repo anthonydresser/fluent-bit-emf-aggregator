@@ -178,6 +178,10 @@ func (a *EMFAggregator) flush() error {
 		// Add all metric values
 		for name, value := range metricMap {
 			stats := value.Reduce()
+			if stats == nil {
+				log.Warn().Printf("No stats found for metric %s\n", name)
+				continue
+			}
 			if len(stats.Values) == 1 {
 				// Single value
 				outputMap.OtherFields[name] = stats.Max
