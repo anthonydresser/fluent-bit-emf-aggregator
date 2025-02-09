@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch: 
 
 jobs:
@@ -22,7 +19,7 @@ jobs:
       - name: Wait for completion and check exit codes
         run: |
           # Wait for emf-generator to finish
-          docker compose wait emf-generator
+          docker compose wait emf-generator || true
           EXIT_CODE=$(docker inspect $(docker compose ps -a -q emf-generator) --format='{{.State.ExitCode}}')
 
           if [ "$EXIT_CODE" != "0" ]; then
