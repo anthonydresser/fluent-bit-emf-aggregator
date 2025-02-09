@@ -18,13 +18,13 @@ import (
 
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	log.Init("emf-aggregator", 0)
+	log.Init("emf-aggregator", log.WarnLevel)
 	return output.FLBPluginRegister(def, "emf_aggregator", "EMF File Aggregator")
 }
 
 //export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
-	log.Info().Println("Initializing")
+	log.Log().Println("Initializing")
 
 	options := common.PluginOptions{}
 
@@ -33,6 +33,20 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 	options.LogStreamName = output.FLBPluginConfigKey(plugin, "log_stream_name")
 	options.CloudWatchEndpoint = output.FLBPluginConfigKey(plugin, "endpoint")
 	options.Protocol = output.FLBPluginConfigKey(plugin, "protocol")
+	logLevel := output.FLBPluginConfigKey(plugin, "log_level")
+
+	if logLevel != "" {
+		switch logLevel {
+		case "debug":
+			log.SetLevel(log.DebugLevel)
+		case "info":
+			log.SetLevel(log.InfoLevel)
+		case "warn":
+			log.SetLevel(log.WarnLevel)
+		case "error":
+			log.SetLevel(log.ErrorLevel)
+		}
+	}
 
 	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
 	if period == "" {

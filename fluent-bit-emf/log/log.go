@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type Logger struct {
 	Info  *levelLogger
 	Warn  *levelLogger
 	Error *levelLogger
+	Log   *levelLogger
 }
 
 type levelLogger struct {
@@ -37,6 +39,7 @@ func Debug() *levelLogger { return defaultLogger.Debug }
 func Info() *levelLogger  { return defaultLogger.Info }
 func Warn() *levelLogger  { return defaultLogger.Warn }
 func Error() *levelLogger { return defaultLogger.Error }
+func Log() *levelLogger   { return defaultLogger.Log }
 
 // Function to change the default logger's level
 func SetLevel(level Level) {
@@ -71,6 +74,7 @@ func NewLogger(name string, level Level) *Logger {
 	logger.Info = &levelLogger{prefix: fmt.Sprintf("[ info] [%s]: ", name), level: InfoLevel, logger: logger}
 	logger.Warn = &levelLogger{prefix: fmt.Sprintf("[ warn] [%s]: ", name), level: WarnLevel, logger: logger}
 	logger.Error = &levelLogger{prefix: fmt.Sprintf("[ error] [%s]: ", name), level: ErrorLevel, logger: logger}
+	logger.Log = &levelLogger{prefix: fmt.Sprintf("[%s]: ", name), level: math.MaxInt, logger: logger}
 
 	return logger
 }
