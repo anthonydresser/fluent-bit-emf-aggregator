@@ -12,6 +12,7 @@ import (
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/emf"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/fluent/fluent-bit-go/output"
 )
@@ -65,7 +66,13 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	options.AggregationPeriod = aggregationPeriod
 
-	aggregator, err := emf.NewEMFAggregator(&options)
+	var flusher flush.Flusher
+
+	if flusher, err = flush.InitFlusher(&options); err != nil {
+		log.Error().Printf("failed to initialize flusher: %v\n", err)
+	}
+
+	aggregator, err := emf.NewEMFAggregator(&options, flusher)
 	if err != nil {
 		log.Error().Printf("failed to create EMFAggregator: %v\n", err)
 		return output.FLB_ERROR

@@ -81,7 +81,6 @@ type EMFMetric struct {
 	DimensionSet map[string]bool        `json:"-"`
 	Dimensions   map[string]string      `json:"-"`
 	MetricData   map[string]MetricValue `json:"-"`
-	Tag          string                 `json:"-"`
 }
 
 // EMF structures remain the same, but we'll add a new constructor
@@ -214,7 +213,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 							isMetric = true
 							metricValue := parseMetricValue(value)
 							if !isValidMetric(&metricValue) {
-								log.Warn().Printf("Found invalid metric %s with value %v\n", strKey, metricValue)
+								log.Warn().Printf("Found invalid metric %s with value %v\n; original: %v", strKey, metricValue, value)
 								continue
 							}
 							emf.MetricData[strKey] = metricValue

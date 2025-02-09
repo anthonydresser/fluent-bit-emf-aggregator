@@ -46,17 +46,12 @@ type Metadata struct {
 	Dimensions map[string]string
 }
 
-func NewEMFAggregator(options *common.PluginOptions) (*EMFAggregator, error) {
+func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		aggregationPeriod: options.AggregationPeriod,
 		metrics:           make(map[string]map[string]*histogram.Histogram),
 		metadataStore:     make(map[string]Metadata),
-	}
-
-	var err error
-
-	if aggregator.flusher, err = flush.InitFlusher(options); err != nil {
-		return nil, err
+		flusher:           flusher,
 	}
 
 	aggregator.Task = NewScheduledTask(options.AggregationPeriod, aggregator.flush)
