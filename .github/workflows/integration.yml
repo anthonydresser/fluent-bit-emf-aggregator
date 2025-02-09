@@ -13,31 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - uses: docker/setup-buildx-action@v2
 
-      - name: Login to Docker Registry
-        uses: docker/login-action@v2
+      - uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v4
-
-      - name: Create cache config
-        run: |
-          cat > docker-compose-cache.json << 'EOF'
-          {
-            "target": "default",
-            "cache-from": [
-              "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"
-            ],
-            "cache-to": [
-              "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"
-            ]
-          }
-          EOF
 
       - name: Build
         run: docker buildx bake --file compose.yml --file docker-compose-cache.json
