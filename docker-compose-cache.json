@@ -1,21 +1,28 @@
 {
-    "groups": {
-      "default": {
-        "targets": ["fluent-bit", "mock-cloudwatch-server", "emf-generator"]
-      }
-    },
     "target": {
-      "fluent-bit": {
-        "cache-from": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"],
-        "cache-to": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"]
-      },
-      "mock-cloudwatch-server": {
-        "cache-from": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"],
-        "cache-to": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"]
-      },
-      "emf-generator": {
-        "cache-from": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"],
-        "cache-to": ["type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"]
-      }
+        "fluent-bit": {
+            "cache-from": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"
+            ],
+            "cache-to": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"
+            ]
+        },
+        "mock-cloudwatch-server": {
+            "cache-from": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"
+            ],
+            "cache-to": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"
+            ]
+        },
+        "emf-generator": {
+            "cache-from": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache"
+            ],
+            "cache-to": [
+                "type=registry,ref=ghcr.io/${{ github.repository }}/build-cache,mode=max"
+            ]
+        }
     }
-  }
+}
