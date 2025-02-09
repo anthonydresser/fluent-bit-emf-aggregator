@@ -136,7 +136,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 		if value.Value != nil {
 			metric.Add(*value.Value, 1)
 		} else if value.Values == nil {
-			if value.Max != nil && value.Min == value.Max {
+			if value.Max != nil && *value.Min == *value.Max {
 				metric.Add(*value.Max, *value.Count)
 			} else {
 				// at this point it shouldn't happen, but just in case

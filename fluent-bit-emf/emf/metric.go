@@ -230,7 +230,7 @@ func validateMetric(value *MetricValue) bool {
 		return true
 	} else if value.Values != nil {
 		return true
-	} else if value.Max != nil && value.Count != nil && value.Max == value.Min {
+	} else if value.Max != nil && value.Count != nil && *value.Max == *value.Min {
 		return true
 	} else {
 		return false
