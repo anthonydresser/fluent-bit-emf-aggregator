@@ -136,17 +136,15 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 		if value.Value != nil {
 			metric.Add(*value.Value, 1)
 		} else if len(value.Values) != 0 && len(value.Counts) != 0 {
-			if value.Max != nil && value.Count != nil && *value.Max == *value.Min {
-				metric.Add(*value.Max, *value.Count)
-			} else {
-				// at this point it shouldn't happen, but just in case
-				log.Warn().Printf("Invalid metric value found for metric %s: %v\n", name, value)
-				continue
-			}
-		} else {
 			for index, v := range value.Values {
 				metric.Add(v, value.Counts[index])
 			}
+		} else if value.Max != nil && value.Count != nil && *value.Max == *value.Min {
+			metric.Add(*value.Max, *value.Count)
+		} else {
+			// at this point it shouldn't happen, but just in case
+			log.Warn().Printf("Invalid metric value found for metric %s: %v\n", name, value)
+			continue
 		}
 	}
 }
