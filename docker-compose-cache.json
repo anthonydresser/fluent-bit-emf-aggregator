@@ -1,0 +1,38 @@
+{
+    "target": {
+      "fluent-bit": {
+        "cache-from": [
+          "type=registry,ref=ghcr.io/anthonydresser/fluent-bit:cache"
+        ],
+        "cache-to": [
+          "type=registry,ref=ghcr.io/anthonydresser/fluent-bit:cache"
+        ],
+        "output": [
+          "type=docker"
+        ]
+      },
+      "emf-generator": {
+        "cache-from": [
+          "type=registry,ref=ghcr.io/anthonydresser/emf-generator:cache"
+        ],
+        "cache-to": [
+          "type=registry,ref=ghcr.io/anthonydresser/emf-generator:cache"
+        ],
+        "output": [
+          "type=docker"
+        ]
+      },
+      "mock-cloudwatch-server": {
+        "cache-from": [
+          "type=registry,ref=ghcr.io/anthonydresser/mock-cloudwatch-server:cache"
+        ],
+        "cache-to": [
+          "type=registry,ref=ghcr.io/anthonydresser/mock-cloudwatch-server:cache"
+        ],
+        "output": [
+          "type=docker"
+        ]
+      }
+    }
+  }
+  
