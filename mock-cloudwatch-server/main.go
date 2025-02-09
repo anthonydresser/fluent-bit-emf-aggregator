@@ -77,7 +77,7 @@ type AWSMetadata struct {
 
 type EMFEvent struct {
 	AWS         AWSMetadata            `json:"_aws"`
-	OtherFields map[string]interface{} `json:",inline"`
+	OtherFields map[string]interface{} `json:"inline"`
 }
 
 func (f CustomWriter) Write(bytes []byte) (int, error) {

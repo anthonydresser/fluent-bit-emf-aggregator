@@ -8,7 +8,7 @@ import (
 
 type EMFEvent struct {
 	AWS         *AWSMetadata           `json:"_aws"`
-	OtherFields map[string]interface{} `json:",inline"`
+	OtherFields map[string]interface{} `json:"inline"`
 }
 
 type AWSMetadata struct {
