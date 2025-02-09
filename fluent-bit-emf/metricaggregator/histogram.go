@@ -1,6 +1,8 @@
 package metricaggregator
 
 import (
+	"fmt"
+
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
@@ -28,7 +30,7 @@ func (va *histogram) Add(metric common.MetricValue) {
 	} else if metric.Count != nil && metric.Max != nil && metric.Min != nil && *metric.Min == *metric.Max {
 		va.add(*metric.Min, *metric.Count)
 	} else {
-		panic("invalid metric")
+		panic(fmt.Sprintf("invalid metric: %v", metric))
 	}
 }
 
