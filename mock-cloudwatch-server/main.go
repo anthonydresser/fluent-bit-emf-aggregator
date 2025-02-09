@@ -71,6 +71,27 @@ func NewMockCloudWatchLogs() *MockCloudWatchLogs {
 	}
 }
 
+type Metric struct {
+	Name              string `json:"Name"`
+	Unit              string `json:"Unit"`
+	StorageResolution uint   `json:"StorageResolution,omitempty"`
+}
+
+type CloudWatchMetric struct {
+	Dimensions [][]string `json:"Dimensions"`
+	Metrics    []Metric   `json:"Metrics"`
+}
+
+type AWSMetadata struct {
+	Timestamp         uint               `json:"Timestamp"`
+	CloudWatchMetrics []CloudWatchMetric `json:"CloudWatchMetrics"`
+}
+
+type EMFEvent struct {
+	AWS         AWSMetadata            `json:"_aws"`
+	OtherFields map[string]interface{} `json:"inline"`
+}
+
 // AWS v2 SDK expects responses to include these fields
 type AWSResponse struct {
 	ResultWrapper interface{} `json:""`
@@ -121,26 +142,25 @@ func (m *MockCloudWatchLogs) handleCreateLogStream(w http.ResponseWriter, r *htt
 func validateEvent(event map[string]interface{}) error {
 	expectedDimensions := make(map[string]struct{})
 	expectedMetrics := make(map[string]struct{})
-	var awsMetadata map[string]interface{}
-	var ok bool
+	var awsMetadata AWSMetadata
 
-	if awsMetadata, ok = event["_aws"].(map[string]interface{}); !ok {
-		return fmt.Errorf("missing _aws field")
+	if bytes, err := json.Marshal(event["_aws"]); err == nil {
+		err = json.Unmarshal(bytes, &awsMetadata)
+		if err != nil {
+			return fmt.Errorf("invalid _aws field: %v", err)
+		}
+	} else {
+		return fmt.Errorf("invalid _aws field: %v", err)
 	}
 
-	if _, ok := awsMetadata["CloudWatchMetrics"].([]interface{}); !ok {
-		return fmt.Errorf("missing CloudWatchMetrics field")
-	}
-
-	for _, metric := range awsMetadata["CloudWatchMetrics"].([]interface{}) {
-		metric := metric.(map[string]interface{})
-		for _, dimension := range metric["Dimensions"].([]interface{}) {
-			for _, value := range dimension.([]interface{}) {
-				expectedDimensions[value.(string)] = struct{}{}
+	for _, cloudwatchMetric := range awsMetadata.CloudWatchMetrics {
+		for _, dimension := range cloudwatchMetric.Dimensions {
+			for _, value := range dimension {
+				expectedDimensions[value] = struct{}{}
 			}
 		}
-		for _, metric := range metric["Metrics"].([]interface{}) {
-			expectedMetrics[metric.(map[string]interface{})["Name"].(string)] = struct{}{}
+		for _, metric := range cloudwatchMetric.Metrics {
+			expectedMetrics[metric.Name] = struct{}{}
 		}
 	}
 
