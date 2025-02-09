@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 )
 
 type dumbFlusher struct {
@@ -60,7 +61,12 @@ func BenchmarkAggregator(b *testing.B) {
 		},
 	}
 
+	log.Init("test", log.WarnLevel)
+
 	for i := 0; i < b.N; i++ {
-		agg.AggregateMetric(&metric)
+		for j := 0; j < 100; j++ {
+			agg.AggregateMetric(&metric)
+		}
+		agg.flush()
 	}
 }

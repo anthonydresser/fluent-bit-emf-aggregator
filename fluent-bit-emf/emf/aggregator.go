@@ -8,18 +8,18 @@ package emf
 import (
 	"C"
 	"fmt"
+	"hash/fnv"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/histogram"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/fluent/fluent-bit-go/output"
 )
-import "github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 
 type InputStats struct {
 	InputLength  int
@@ -31,9 +31,9 @@ type EMFAggregator struct {
 	mu                sync.RWMutex
 	aggregationPeriod time.Duration
 	// Map of dimension hash -> metric name -> aggregated values
-	metrics map[string]map[string]*histogram.Histogram
+	metrics map[uint64]map[string]*histogram.Histogram
 	// Store metadata and metric definitions
-	metadataStore map[string]Metadata
+	metadataStore map[uint64]Metadata
 	stats         InputStats
 
 	// flushing helpers
@@ -49,8 +49,8 @@ type Metadata struct {
 func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		aggregationPeriod: options.AggregationPeriod,
-		metrics:           make(map[string]map[string]*histogram.Histogram),
-		metadataStore:     make(map[string]Metadata),
+		metrics:           make(map[uint64]map[string]*histogram.Histogram),
+		metadataStore:     make(map[uint64]Metadata),
 		flusher:           flusher,
 	}
 
@@ -90,7 +90,7 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 
 func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	// Create dimension hash for grouping
-	dimHash := createDimensionHash(emf.Dimensions)
+	dimHash := createDimensionHashFNV(emf.Dimensions)
 
 	// Initialize or update metadata store
 	if metadata, exists := a.metadataStore[dimHash]; !exists {
@@ -160,13 +160,13 @@ func (a *EMFAggregator) flush() error {
 		// Get the metadata for this dimension set
 		metadata, exists := a.metadataStore[dimHash]
 		if !exists {
-			log.Warn().Printf("No metadata found for dimension hash %s\n", dimHash)
+			log.Warn().Println("No metadata found for hash")
 			continue
 		}
 
 		// Skip if no AWS metadata is available
 		if metadata.AWS == nil {
-			log.Warn().Printf("No AWS metadata found for dimension hash %s\n", dimHash)
+			log.Warn().Println("No AWS metadata found for hash")
 			continue
 		}
 
@@ -215,8 +215,8 @@ func (a *EMFAggregator) flush() error {
 	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
-	a.metrics = make(map[string]map[string]*histogram.Histogram)
-	a.metadataStore = make(map[string]Metadata)
+	a.metrics = make(map[uint64]map[string]*histogram.Histogram)
+	a.metadataStore = make(map[uint64]Metadata)
 	a.stats.InputLength = 0
 	a.stats.InputRecords = 0
 
@@ -224,19 +224,27 @@ func (a *EMFAggregator) flush() error {
 	return nil
 }
 
-// Helper functions
-func createDimensionHash(dimensions map[string]string) string {
-	// Create a slice to hold the sorted key-value pairs
-	pairs := make([]string, 0, len(dimensions))
-
-	// Convert map entries to sorted slice
-	for k, v := range dimensions {
-		pairs = append(pairs, k+"="+v)
+// Using FNV hash - fastest approach
+func createDimensionHashFNV(dimensions map[string]string) uint64 {
+	if len(dimensions) == 0 {
+		return 0
 	}
 
-	// Sort the pairs to ensure consistent ordering
-	sort.Strings(pairs)
+	// Create a slice of keys to sort
+	keys := make([]string, 0, len(dimensions))
+	for k := range dimensions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 
-	// Join all pairs with a delimiter
-	return strings.Join(pairs, ";")
+	// Create hash
+	h := fnv.New64a()
+
+	// Write sorted keys and values
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte(dimensions[k]))
+	}
+
+	return h.Sum64()
 }
