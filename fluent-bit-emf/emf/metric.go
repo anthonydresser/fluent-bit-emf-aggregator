@@ -13,11 +13,11 @@ import (
 type MetricValue struct {
 	Value  *float64  `json:"Value,omitempty"`
 	Values []float64 `json:"Values,omitempty"`
-	Counts []int64   `json:"Counts,omitempty"`
-	Min    float64   `json:"Min,omitempty"`
-	Max    float64   `json:"Max,omitempty"`
-	Sum    float64   `json:"Sum,omitempty"`
-	Count  int64     `json:"Count,omitempty"`
+	Counts []uint    `json:"Counts,omitempty"`
+	Min    *float64  `json:"Min,omitempty"`
+	Max    *float64  `json:"Max,omitempty"`
+	Sum    *float64  `json:"Sum,omitempty"`
+	Count  *uint     `json:"Count,omitempty"`
 }
 
 type EMFMetric struct {
@@ -191,22 +191,26 @@ func parseMetricValue(value interface{}) MetricValue {
 			}
 		}
 		if counts, ok := v["Counts"].([]interface{}); ok {
-			mv.Counts = make([]int64, len(counts))
+			mv.Counts = make([]uint, len(counts))
 			for i, count := range counts {
-				mv.Counts[i] = int64(utils.ConvertToFloat64(count))
+				mv.Counts[i] = uint(utils.ConvertToFloat64(count))
 			}
 		}
 		if min, ok := v["Min"]; ok {
-			mv.Min = utils.ConvertToFloat64(min)
+			value := utils.ConvertToFloat64(min)
+			mv.Min = &value
 		}
 		if max, ok := v["Max"]; ok {
-			mv.Max = utils.ConvertToFloat64(max)
+			value := utils.ConvertToFloat64(max)
+			mv.Max = &value
 		}
 		if sum, ok := v["Sum"]; ok {
-			mv.Sum = utils.ConvertToFloat64(sum)
+			value := utils.ConvertToFloat64(sum)
+			mv.Sum = &value
 		}
 		if count, ok := v["Count"]; ok {
-			mv.Count = int64(utils.ConvertToFloat64(count))
+			value := uint(utils.ConvertToFloat64(count))
+			mv.Count = &value
 		}
 	default:
 		// Handle simple value
