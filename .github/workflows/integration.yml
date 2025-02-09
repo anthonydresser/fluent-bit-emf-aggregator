@@ -36,7 +36,7 @@ jobs:
         run: |
           # Wait for emf-generator to finish
           docker compose wait emf-generator
-          EXIT_CODE=$(docker inspect emf-generator --format='{{.State.ExitCode}}')
+          EXIT_CODE=$(docker inspect $(docker-compose ps -a -q emf-generator) --format='{{.State.ExitCode}}')
 
           if [ "$EXIT_CODE" != "0" ]; then
             echo "emf-generator failed with exit code $EXIT_CODE"
