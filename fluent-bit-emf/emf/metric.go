@@ -23,6 +23,7 @@ type MetricValue struct {
 
 func (m MetricValue) String() string {
 	var b strings.Builder
+	b.Grow(256) // Pre-allocate space
 	b.WriteString("{ ")
 
 	// Helper function to handle nil checks and formatting
@@ -37,19 +38,28 @@ func (m MetricValue) String() string {
 			return
 		}
 
-		if isPointer {
-			// For pointer types, we need to dereference
-			switch v := value.(type) {
-			case *float64:
-				b.WriteString(fmt.Sprintf("%v", *v))
-			case *int64:
-				b.WriteString(fmt.Sprintf("%v", *v))
-			case *uint:
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		} else {
+		if !isPointer {
 			// For non-pointer types (slices)
 			b.WriteString(fmt.Sprintf("%v", value))
+			return
+		}
+
+		// For pointer types, we need to check the concrete type
+		switch v := value.(type) {
+		case *float64:
+			if v == nil {
+				b.WriteString("nil")
+			} else {
+				b.WriteString(fmt.Sprintf("%v", *v))
+			}
+		case *int64:
+			if v == nil {
+				b.WriteString("nil")
+			} else {
+				b.WriteString(fmt.Sprintf("%v", *v))
+			}
+		default:
+			b.WriteString("nil")
 		}
 	}
 

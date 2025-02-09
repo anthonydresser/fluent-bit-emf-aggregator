@@ -2,7 +2,6 @@ package log
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -74,7 +73,6 @@ func NewLogger(name string, level Level) *Logger {
 	logger.Info = &levelLogger{prefix: fmt.Sprintf("[ info] [%s]: ", name), level: InfoLevel, logger: logger}
 	logger.Warn = &levelLogger{prefix: fmt.Sprintf("[ warn] [%s]: ", name), level: WarnLevel, logger: logger}
 	logger.Error = &levelLogger{prefix: fmt.Sprintf("[ error] [%s]: ", name), level: ErrorLevel, logger: logger}
-	logger.Log = &levelLogger{prefix: fmt.Sprintf("[%s]: ", name), level: math.MaxInt, logger: logger}
 
 	return logger
 }

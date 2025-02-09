@@ -18,13 +18,13 @@ import (
 
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	log.Init("emf-aggregator", log.WarnLevel)
+	log.Init("emf-aggregator", log.DebugLevel)
 	return output.FLBPluginRegister(def, "emf_aggregator", "EMF File Aggregator")
 }
 
 //export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
-	log.Log().Println("Initializing")
+	log.Info().Println("Initializing")
 
 	options := common.PluginOptions{}
 
@@ -33,19 +33,22 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 	options.LogStreamName = output.FLBPluginConfigKey(plugin, "log_stream_name")
 	options.CloudWatchEndpoint = output.FLBPluginConfigKey(plugin, "endpoint")
 	options.Protocol = output.FLBPluginConfigKey(plugin, "protocol")
-	logLevel := output.FLBPluginConfigKey(plugin, "log_level")
+	logLevel := output.FLBPluginConfigKey(plugin, "level_log")
 
-	if logLevel != "" {
-		switch logLevel {
-		case "debug":
-			log.SetLevel(log.DebugLevel)
-		case "info":
-			log.SetLevel(log.InfoLevel)
-		case "warn":
-			log.SetLevel(log.WarnLevel)
-		case "error":
-			log.SetLevel(log.ErrorLevel)
-		}
+	switch logLevel {
+	case "":
+		log.SetLevel(log.WarnLevel)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	default:
+		log.Warn().Printf("Invalid log level: %s, using default warn\n", logLevel)
+		log.SetLevel(log.WarnLevel)
 	}
 
 	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
