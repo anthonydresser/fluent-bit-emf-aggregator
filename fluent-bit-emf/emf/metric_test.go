@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
@@ -103,12 +104,12 @@ func TestParseMetricValue(t *testing.T) {
 	testCases := []struct {
 		name     string
 		input    interface{}
-		expected MetricValue
+		expected common.MetricValue
 	}{
 		{
 			name:  "Simple float value",
 			input: float64(123.45),
-			expected: MetricValue{
+			expected: common.MetricValue{
 				Value: float64Ptr(123.45),
 			},
 		},
@@ -122,7 +123,7 @@ func TestParseMetricValue(t *testing.T) {
 				"Sum":    float64(3.0),
 				"Count":  float64(2),
 			},
-			expected: MetricValue{
+			expected: common.MetricValue{
 				Values: []float64{1.0, 2.0},
 				Counts: []uint{1, 1},
 				Min:    &expectedMin,

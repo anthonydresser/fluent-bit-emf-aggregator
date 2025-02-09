@@ -16,8 +16,8 @@ import (
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/histogram"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/metricaggregator"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
@@ -31,7 +31,7 @@ type EMFAggregator struct {
 	mu                sync.RWMutex
 	aggregationPeriod time.Duration
 	// Map of dimension hash -> metric name -> aggregated values
-	metrics map[uint64]map[string]*histogram.Histogram
+	metrics map[uint64]map[string]metricaggregator.MetricAggregator
 	// Store metadata and metric definitions
 	metadataStore map[uint64]Metadata
 	stats         InputStats
@@ -49,7 +49,7 @@ type Metadata struct {
 func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		aggregationPeriod: options.AggregationPeriod,
-		metrics:           make(map[uint64]map[string]*histogram.Histogram),
+		metrics:           make(map[uint64]map[string]metricaggregator.MetricAggregator),
 		metadataStore:     make(map[uint64]Metadata),
 		flusher:           flusher,
 	}
@@ -117,30 +117,21 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 
 	// Initialize metric map for this dimension set if not exists
 	if _, exists := a.metrics[dimHash]; !exists {
-		a.metrics[dimHash] = make(map[string]*histogram.Histogram)
+		a.metrics[dimHash] = make(map[string]metricaggregator.MetricAggregator)
 	}
 
 	// Aggregate each metric
 	for name, value := range emf.MetricData {
 		if _, exists := a.metrics[dimHash][name]; !exists {
-			a.metrics[dimHash][name] = histogram.NewHistogram()
-		}
-
-		metric := a.metrics[dimHash][name]
-
-		if value.Value != nil {
-			metric.Add(*value.Value, 1)
-		} else if len(value.Values) != 0 && len(value.Counts) != 0 {
-			for index, v := range value.Values {
-				metric.Add(v, value.Counts[index])
+			aggregator, err := metricaggregator.InitMetricAggregator(value)
+			if err != nil {
+				log.Error().Printf("failed to initialize metric aggregator: %v\n", err)
+				continue
 			}
-		} else if value.Max != nil && value.Count != nil && *value.Max == *value.Min {
-			metric.Add(*value.Max, *value.Count)
-		} else {
-			// at this point it shouldn't happen, but just in case
-			log.Warn().Printf("Invalid metric value found for metric %s: %v\n", name, value)
-			continue
+			a.metrics[dimHash][name] = aggregator
 		}
+
+		a.metrics[dimHash][name].Add(value)
 	}
 }
 
@@ -215,7 +206,7 @@ func (a *EMFAggregator) flush() error {
 	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
-	a.metrics = make(map[uint64]map[string]*histogram.Histogram)
+	a.metrics = make(map[uint64]map[string]metricaggregator.MetricAggregator)
 	a.metadataStore = make(map[uint64]Metadata)
 	a.stats.InputLength = 0
 	a.stats.InputRecords = 0

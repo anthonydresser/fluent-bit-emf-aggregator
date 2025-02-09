@@ -54,7 +54,7 @@ func BenchmarkAggregator(b *testing.B) {
 		Dimensions: map[string]string{
 			"test-dimension": "test-value",
 		},
-		MetricData: map[string]MetricValue{
+		MetricData: map[string]common.MetricValue{
 			"test-metric": {
 				Value: &metricvalue,
 			},

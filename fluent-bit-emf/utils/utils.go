@@ -16,6 +16,10 @@ func ConvertToFloat64(v interface{}) float64 {
 		return float64(v)
 	case int64:
 		return float64(v)
+	case uint:
+		return float64(v)
+	case uint64:
+		return float64(v)
 	case string:
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f

@@ -4,89 +4,23 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
-type MetricValue struct {
-	Value  *float64  `json:"Value,omitempty"`
-	Values []float64 `json:"Values,omitempty"`
-	Counts []uint    `json:"Counts,omitempty"`
-	Min    *float64  `json:"Min,omitempty"`
-	Max    *float64  `json:"Max,omitempty"`
-	Sum    *float64  `json:"Sum,omitempty"`
-	Count  *uint     `json:"Count,omitempty"`
-}
-
-func (m MetricValue) String() string {
-	var b strings.Builder
-	b.Grow(256) // Pre-allocate space
-	b.WriteString("{ ")
-
-	// Helper function to handle nil checks and formatting
-	addField := func(name string, value interface{}, isPointer bool) {
-		if b.Len() > 2 { // Add comma if not the first field
-			b.WriteString(", ")
-		}
-		b.WriteString(name + ": ")
-
-		if value == nil {
-			b.WriteString("nil")
-			return
-		}
-
-		if !isPointer {
-			// For non-pointer types (slices)
-			b.WriteString(fmt.Sprintf("%v", value))
-			return
-		}
-
-		// For pointer types, we need to check the concrete type
-		switch v := value.(type) {
-		case *float64:
-			if v == nil {
-				b.WriteString("nil")
-			} else {
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		case *int64:
-			if v == nil {
-				b.WriteString("nil")
-			} else {
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		default:
-			b.WriteString("nil")
-		}
-	}
-
-	// Add all fields using the helper function
-	addField("Value", m.Value, true)
-	addField("Values", m.Values, false)
-	addField("Counts", m.Counts, false)
-	addField("Min", m.Min, true)
-	addField("Max", m.Max, true)
-	addField("Sum", m.Sum, true)
-	addField("Count", m.Count, true)
-
-	b.WriteString(" }")
-	return b.String()
-}
-
 type EMFMetric struct {
-	AWS          *common.AWSMetadata    `json:"_aws"`
-	DimensionSet map[string]bool        `json:"-"`
-	Dimensions   map[string]string      `json:"-"`
-	MetricData   map[string]MetricValue `json:"-"`
+	AWS          *common.AWSMetadata           `json:"_aws"`
+	DimensionSet map[string]bool               `json:"-"`
+	Dimensions   map[string]string             `json:"-"`
+	MetricData   map[string]common.MetricValue `json:"-"`
 }
 
 // EMF structures remain the same, but we'll add a new constructor
 func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	emf := &EMFMetric{
-		MetricData:   make(map[string]MetricValue),
+		MetricData:   make(map[string]common.MetricValue),
 		DimensionSet: make(map[string]bool),
 		Dimensions:   make(map[string]string),
 	}
@@ -237,22 +171,26 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	return emf, nil
 }
 
-func parseMetricValue(value interface{}) MetricValue {
-	mv := MetricValue{}
+func parseMetricValue(value interface{}) common.MetricValue {
+	mv := common.MetricValue{}
 
 	switch v := value.(type) {
 	case map[interface{}]interface{}:
 		// Handle structured metric value
-		if values, ok := v["Values"].([]interface{}); ok {
-			mv.Values = make([]float64, len(values))
-			for i, val := range values {
-				mv.Values[i] = utils.ConvertToFloat64(val)
+		if values, exists := v["Values"]; exists {
+			if actual, ok := values.([]interface{}); ok {
+				mv.Values = make([]float64, len(actual))
+				for i, val := range actual {
+					mv.Values[i] = utils.ConvertToFloat64(val)
+				}
 			}
 		}
-		if counts, ok := v["Counts"].([]interface{}); ok {
-			mv.Counts = make([]uint, len(counts))
-			for i, count := range counts {
-				mv.Counts[i] = uint(utils.ConvertToFloat64(count))
+		if counts, exists := v["Counts"]; exists {
+			if actual, ok := counts.([]interface{}); ok {
+				mv.Counts = make([]uint, len(actual))
+				for i, val := range actual {
+					mv.Counts[i] = uint(utils.ConvertToFloat64(val))
+				}
 			}
 		}
 		if min, ok := v["Min"]; ok {
@@ -280,12 +218,12 @@ func parseMetricValue(value interface{}) MetricValue {
 	return mv
 }
 
-func isValidMetric(value *MetricValue) bool {
+func isValidMetric(value *common.MetricValue) bool {
 	if value.Value != nil {
 		return true
 	} else if len(value.Values) != 0 && len(value.Counts) != 0 {
 		return true
-	} else if value.Max != nil && value.Count != nil && *value.Max == *value.Min {
+	} else if value.Sum != nil && value.Count != nil && value.Max != nil && value.Min != nil {
 		return true
 	} else {
 		return false
