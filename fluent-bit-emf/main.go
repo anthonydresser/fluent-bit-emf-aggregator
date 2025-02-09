@@ -50,13 +50,13 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
 	if period == "" {
-		log.Info().Println("AggregationPeriod not set, defaulting to 1m")
+		log.Warn().Println("AggregationPeriod not set, defaulting to 1m")
 		period = "1m"
 	}
 
 	aggregationPeriod, err := time.ParseDuration(period)
 	if err != nil {
-		log.Info().Printf("invalid aggregation period: %v\n", err)
+		log.Error().Printf("invalid aggregation period: %v\n", err)
 		return output.FLB_ERROR
 	}
 
@@ -64,7 +64,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 	aggregator, err := emf.NewEMFAggregator(&options)
 	if err != nil {
-		log.Info().Printf("failed to create EMFAggregator: %v\n", err)
+		log.Error().Printf("failed to create EMFAggregator: %v\n", err)
 		return output.FLB_ERROR
 	}
 

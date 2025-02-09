@@ -1,14 +1,15 @@
 package common
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
 type EMFEvent struct {
-	AWS         *AWSMetadata           `json:"_aws"`
-	OtherFields map[string]interface{} `json:"inline"`
+	AWS         *AWSMetadata
+	OtherFields map[string]interface{}
 }
 
 type AWSMetadata struct {
@@ -25,6 +26,16 @@ type ProjectionDefinition struct {
 	Namespace  string             `json:"Namespace"`
 	Dimensions [][]string         `json:"Dimensions"`
 	Metrics    []MetricDefinition `json:"Metrics"`
+}
+
+func (e EMFEvent) MarshalJSON() ([]byte, error) {
+	output := make(map[string]interface{})
+	output["_aws"] = e.AWS
+
+	for k, v := range e.OtherFields {
+		output[k] = v
+	}
+	return json.Marshal(output)
 }
 
 func merge(old []MetricDefinition, new []MetricDefinition) {
