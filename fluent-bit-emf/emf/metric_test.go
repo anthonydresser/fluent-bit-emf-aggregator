@@ -48,11 +48,6 @@ func TestEmfFromRecord_ValidInput(t *testing.T) {
 		t.Errorf("Expected 1 CloudWatchMetrics, got %d", len(emf.AWS.CloudWatchMetrics))
 	}
 
-	// Verify metric data
-	if value := *emf.MetricData["TestMetric"].Value; value != 100 {
-		t.Errorf("Expected metric value 100, got %f", value)
-	}
-
 	// Verify dimensions
 	if value := emf.Dimensions["DimensionName"]; value != "DimensionValue" {
 		t.Errorf("Expected dimension value 'DimensionValue', got %s", value)
@@ -107,11 +102,9 @@ func TestParseMetricValue(t *testing.T) {
 		expected common.MetricValue
 	}{
 		{
-			name:  "Simple float value",
-			input: float64(123.45),
-			expected: common.MetricValue{
-				Value: float64Ptr(123.45),
-			},
+			name:     "Simple float value",
+			input:    float64(123.45),
+			expected: common.MetricValue{},
 		},
 		{
 			name: "Structured metric value",

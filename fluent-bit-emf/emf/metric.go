@@ -11,19 +11,19 @@ import (
 )
 
 type EMFMetric struct {
-	AWS          *common.AWSMetadata           `json:"_aws"`
-	DimensionSet map[string]bool               `json:"-"`
-	Dimensions   map[string]string             `json:"-"`
-	MetricData   map[string]common.MetricValue `json:"-"`
+	AWS        *common.AWSMetadata           `json:"_aws"`
+	Dimensions map[string]string             `json:"-"`
+	MetricData map[string]common.MetricValue `json:"-"`
 }
 
 // EMF structures remain the same, but we'll add a new constructor
 func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	emf := &EMFMetric{
-		MetricData:   make(map[string]common.MetricValue),
-		DimensionSet: make(map[string]bool),
-		Dimensions:   make(map[string]string),
+		MetricData: make(map[string]common.MetricValue),
+		Dimensions: make(map[string]string),
 	}
+
+	dimensionSet := make(map[string]struct{})
 
 	if rawAwsData, exists := record["_aws"]; !exists {
 		return nil, fmt.Errorf("no aws metadata from found in record; likely means malformed record")
@@ -92,7 +92,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 											dimStrings := make([]string, len(dimSet))
 											for k, d := range dimSet {
 												dimStrings[k] = utils.ToString(d)
-												emf.DimensionSet[utils.ToString(d)] = true
+												dimensionSet[utils.ToString(d)] = struct{}{}
 											}
 											// we sort here so we can do easy comparisons later
 											sort.Strings(dimStrings)
@@ -161,7 +161,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 			}
 
 			if !isMetric {
-				if _, present := emf.DimensionSet[strKey]; present {
+				if _, present := dimensionSet[strKey]; present {
 					emf.Dimensions[strKey] = utils.ToString(value)
 				}
 			}
@@ -189,7 +189,7 @@ func parseMetricValue(value interface{}) common.MetricValue {
 			if actual, ok := counts.([]interface{}); ok {
 				mv.Counts = make([]uint, len(actual))
 				for i, val := range actual {
-					mv.Counts[i] = uint(utils.ConvertToFloat64(val))
+					mv.Counts[i] = uint(utils.ConvertToUint(val))
 				}
 			}
 		}
@@ -206,22 +206,31 @@ func parseMetricValue(value interface{}) common.MetricValue {
 			mv.Sum = &value
 		}
 		if count, ok := v["Count"]; ok {
-			value := uint(utils.ConvertToFloat64(count))
+			value := uint(utils.ConvertToUint(count))
 			mv.Count = &value
 		}
 	default:
 		// Handle simple value
 		value := utils.ConvertToFloat64(v)
-		mv.Value = &value
+		count := uint(1)
+		counts := []uint{1}
+		values := []float64{value}
+		max := value
+		min := value
+		sum := value
+		mv.Count = &count
+		mv.Counts = counts
+		mv.Max = &max
+		mv.Min = &min
+		mv.Sum = &sum
+		mv.Values = values
 	}
 
 	return mv
 }
 
 func isValidMetric(value *common.MetricValue) bool {
-	if value.Value != nil {
-		return true
-	} else if len(value.Values) != 0 && len(value.Counts) != 0 {
+	if len(value.Values) != 0 && len(value.Counts) != 0 {
 		return true
 	} else if value.Sum != nil && value.Count != nil && value.Max != nil && value.Min != nil {
 		return true

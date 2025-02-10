@@ -28,6 +28,29 @@ func ConvertToFloat64(v interface{}) float64 {
 	return 0
 }
 
+// Helper function to convert interface{} to float64
+func ConvertToUint(v interface{}) uint64 {
+	switch v := v.(type) {
+	case float64:
+		return uint64(v)
+	case float32:
+		return uint64(v)
+	case int:
+		return uint64(v)
+	case int64:
+		return uint64(v)
+	case uint:
+		return uint64(v)
+	case uint64:
+		return v
+	case string:
+		if f, err := strconv.ParseUint(v, 10, 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
 func Find[T any](array []T, test func(T) bool) int {
 	found := -1
 	for i, v := range array {

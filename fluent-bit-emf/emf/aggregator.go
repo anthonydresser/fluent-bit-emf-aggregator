@@ -177,7 +177,7 @@ func (a *EMFAggregator) flush() error {
 				log.Warn().Printf("No stats found for metric %s\n", name)
 				continue
 			}
-			if len(stats.Values) == 1 {
+			if stats.Count == 1 {
 				// Single value
 				outputMap.OtherFields[name] = stats.Max
 			} else {

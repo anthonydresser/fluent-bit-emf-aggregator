@@ -91,13 +91,12 @@ func (m *AWSMetadata) Merge(new *AWSMetadata) {
 }
 
 type MetricValue struct {
-	Value  *float64  `json:"Value,omitempty"`
-	Values []float64 `json:"Values,omitempty"`
-	Counts []uint    `json:"Counts,omitempty"`
-	Min    *float64  `json:"Min,omitempty"`
-	Max    *float64  `json:"Max,omitempty"`
-	Sum    *float64  `json:"Sum,omitempty"`
-	Count  *uint     `json:"Count,omitempty"`
+	Values []float64
+	Counts []uint
+	Min    *float64
+	Max    *float64
+	Sum    *float64
+	Count  *uint
 }
 
 func (m MetricValue) String() string {
@@ -149,7 +148,6 @@ func (m MetricValue) String() string {
 	}
 
 	// Add all fields using the helper function
-	addField("Value", m.Value, true)
 	addField("Values", m.Values, false)
 	addField("Counts", m.Counts, false)
 	addField("Min", m.Min, true)

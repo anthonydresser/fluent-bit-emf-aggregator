@@ -22,9 +22,7 @@ type MetricStats struct {
 
 func InitMetricAggregator(sample common.MetricValue) (MetricAggregator, error) {
 	// based on the sample we can predetermine what kind of aggregator we need
-	if sample.Value != nil {
-		return newHistogram(), nil
-	} else if len(sample.Counts) > 0 && len(sample.Values) > 0 {
+	if len(sample.Counts) > 0 && len(sample.Values) > 0 {
 		return newHistogram(), nil
 	} else if sample.Sum != nil && sample.Count != nil && sample.Max != nil && sample.Min != nil {
 		return newRateAggregator(), nil

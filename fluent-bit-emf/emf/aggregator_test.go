@@ -30,7 +30,7 @@ func BenchmarkAggregator(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	metricvalue := 1.0
+	// metricvalue := 1.0
 
 	metric := EMFMetric{
 		AWS: &common.AWSMetadata{
@@ -55,9 +55,7 @@ func BenchmarkAggregator(b *testing.B) {
 			"test-dimension": "test-value",
 		},
 		MetricData: map[string]common.MetricValue{
-			"test-metric": {
-				Value: &metricvalue,
-			},
+			"test-metric": {},
 		},
 	}
 

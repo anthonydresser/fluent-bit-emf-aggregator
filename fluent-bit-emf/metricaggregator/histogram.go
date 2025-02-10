@@ -21,9 +21,7 @@ func newHistogram() *histogram {
 }
 
 func (va *histogram) Add(metric common.MetricValue) error {
-	if metric.Value != nil {
-		va.add(*metric.Value, 1)
-	} else if len(metric.Counts) > 0 && len(metric.Values) > 0 {
+	if len(metric.Counts) > 0 && len(metric.Values) > 0 {
 		for i, value := range metric.Values {
 			va.add(value, metric.Counts[i])
 		}
