@@ -96,3 +96,8 @@ func ToString(v interface{}) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
+
+func ToPtr[T any](val T) *T {
+	value := val
+	return &value
+}

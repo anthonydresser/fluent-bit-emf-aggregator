@@ -24,113 +24,120 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	}
 
 	dimensionSet := make(map[string]struct{})
+	metricSet := make(map[string]struct{})
+
+	var awsData map[interface{}]interface{}
 
 	if rawAwsData, exists := record["_aws"]; !exists {
 		return nil, fmt.Errorf("no aws metadata from found in record; likely means malformed record")
 	} else {
-		if awsData, ok := rawAwsData.(map[interface{}]interface{}); !ok {
+		var ok bool
+		if awsData, ok = rawAwsData.(map[interface{}]interface{}); !ok {
 			return nil, fmt.Errorf("aws metadata was not expected type; expect map, was %v", rawAwsData)
+		}
+	}
+
+	aws := &common.AWSMetadata{}
+
+	// Handle Timestamp
+	if ts, exists := awsData["Timestamp"]; !exists {
+		return nil, fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
+	} else {
+		switch v := ts.(type) {
+		case int64:
+			aws.Timestamp = v
+		case int:
+			aws.Timestamp = int64(v)
+		case uint:
+			aws.Timestamp = int64(v)
+		case uint32:
+			aws.Timestamp = int64(v)
+		case uint64:
+			aws.Timestamp = int64(v)
+		default:
+			return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
+		}
+	}
+
+	// Handle CloudWatch Metrics
+	if cwMetrics, exists := awsData["CloudWatchMetrics"]; !exists {
+		return nil, fmt.Errorf("no CloudWatchMetrics key was found; likely means malformed record")
+	} else {
+		if metricsArray, ok := cwMetrics.([]interface{}); !ok {
+			return nil, fmt.Errorf("CloudWatchMetrics is not an array; likely means malformed record")
 		} else {
-			aws := &common.AWSMetadata{}
-
-			// Handle Timestamp
-			if ts, exists := awsData["Timestamp"]; !exists {
-				return nil, fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
-			} else {
-				switch v := ts.(type) {
-				case int64:
-					aws.Timestamp = v
-				case int:
-					aws.Timestamp = int64(v)
-				case uint:
-					aws.Timestamp = int64(v)
-				case uint32:
-					aws.Timestamp = int64(v)
-				case uint64:
-					aws.Timestamp = int64(v)
-				default:
-					return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
-				}
-			}
-
-			// Handle CloudWatch Metrics
-			if cwMetrics, exists := awsData["CloudWatchMetrics"]; !exists {
-				return nil, fmt.Errorf("no CloudWatchMetrics key was found; likely means malformed record")
-			} else {
-				if metricsArray, ok := cwMetrics.([]interface{}); !ok {
-					return nil, fmt.Errorf("CloudWatchMetrics is not an array; likely means malformed record")
+			aws.CloudWatchMetrics = make([]common.ProjectionDefinition, len(metricsArray))
+			for i, metricDef := range metricsArray {
+				if md, ok := metricDef.(map[interface{}]interface{}); !ok {
+					log.Warn().Printf("Skipping metric: Metric definition was not a map, was %v\n", metricDef)
+					continue
 				} else {
-					aws.CloudWatchMetrics = make([]common.ProjectionDefinition, len(metricsArray))
-					for i, metricDef := range metricsArray {
-						if md, ok := metricDef.(map[interface{}]interface{}); !ok {
-							log.Warn().Printf("Skipping metric: Metric definition was not a map, was %v\n", metricDef)
+					// Parse Namespace
+					if ns, exists := md["Namespace"]; !exists {
+						log.Warn().Println("Skipping metric: Metric definition had no Namespace field")
+						continue
+					} else {
+						aws.CloudWatchMetrics[i].Namespace = utils.ToString(ns)
+					}
+
+					// Parse Dimensions
+					if dims, exists := md["Dimensions"]; !exists {
+						log.Warn().Println("Skipping metric: Metric definition had no Dimensions field")
+						continue
+					} else {
+						if dimArray, ok := dims.([]interface{}); !ok {
+							log.Warn().Printf("Skipping metric: Dimensions was not an array, was %v\n", dims)
 							continue
 						} else {
-							// Parse Namespace
-							if ns, exists := md["Namespace"]; !exists {
-								log.Warn().Println("Skipping metric: Metric definition had no Namespace field")
-								continue
-							} else {
-								aws.CloudWatchMetrics[i].Namespace = utils.ToString(ns)
-							}
-
-							// Parse Dimensions
-							if dims, exists := md["Dimensions"]; !exists {
-								log.Warn().Println("Skipping metric: Metric definition had no Dimensions field")
-								continue
-							} else {
-								if dimArray, ok := dims.([]interface{}); !ok {
-									log.Warn().Printf("Skipping metric: Dimensions was not an array, was %v\n", dims)
+							aws.CloudWatchMetrics[i].Dimensions = make([][]string, len(dimArray))
+							for j, dim := range dimArray {
+								if dimSet, ok := dim.([]interface{}); !ok {
+									log.Warn().Printf("Skipping dimension set: was not an array, was %v\n", dim)
 									continue
 								} else {
-									aws.CloudWatchMetrics[i].Dimensions = make([][]string, len(dimArray))
-									for j, dim := range dimArray {
-										if dimSet, ok := dim.([]interface{}); !ok {
-											log.Warn().Printf("Skipping dimension set: was not an array, was %v\n", dim)
-											continue
-										} else {
-											dimStrings := make([]string, len(dimSet))
-											for k, d := range dimSet {
-												dimStrings[k] = utils.ToString(d)
-												dimensionSet[utils.ToString(d)] = struct{}{}
-											}
-											// we sort here so we can do easy comparisons later
-											sort.Strings(dimStrings)
-											aws.CloudWatchMetrics[i].Dimensions[j] = dimStrings
-										}
+									dimStrings := make([]string, len(dimSet))
+									for k, d := range dimSet {
+										dimStrings[k] = utils.ToString(d)
+										dimensionSet[utils.ToString(d)] = struct{}{}
 									}
+									// we sort here so we can do easy comparisons later
+									sort.Strings(dimStrings)
+									aws.CloudWatchMetrics[i].Dimensions[j] = dimStrings
 								}
 							}
+						}
+					}
 
-							// Parse Metrics
-							if metrics, exists := md["Metrics"]; !exists {
-								log.Warn().Println("Skipping metric: Metric definition had no Metrics field")
-								continue
-							} else {
-								if metricsArray, ok := metrics.([]interface{}); !ok {
-									log.Warn().Printf("Skipping metric: Metrics was not an array, was %v\n", metrics)
+					// Parse Metrics
+					if metrics, exists := md["Metrics"]; !exists {
+						log.Warn().Println("Skipping metric: Metric definition had no Metrics field")
+						continue
+					} else {
+						if metricsArray, ok := metrics.([]interface{}); !ok {
+							log.Warn().Printf("Skipping metric: Metrics was not an array, was %v\n", metrics)
+							continue
+						} else {
+							aws.CloudWatchMetrics[i].Metrics = make([]common.MetricDefinition, len(metricsArray))
+
+							for j, metric := range metricsArray {
+								if m, ok := metric.(map[interface{}]interface{}); !ok {
+									log.Warn().Printf("Skipping metric: Metric was not a map, was %v\n", metric)
 									continue
 								} else {
-									aws.CloudWatchMetrics[i].Metrics = make([]common.MetricDefinition, len(metricsArray))
-
-									for j, metric := range metricsArray {
-										if m, ok := metric.(map[interface{}]interface{}); !ok {
-											log.Warn().Printf("Skipping metric: Metric was not a map, was %v\n", metric)
-											continue
-										} else {
-											aws.CloudWatchMetrics[i].Metrics[j].Name = utils.ToString(m["Name"])
-											aws.CloudWatchMetrics[i].Metrics[j].Unit = utils.ToString(m["Unit"])
-										}
-									}
+									name := utils.ToString(m["Name"])
+									unit := utils.ToString(m["Unit"])
+									aws.CloudWatchMetrics[i].Metrics[j].Name = name
+									aws.CloudWatchMetrics[i].Metrics[j].Unit = unit
+									metricSet[name] = struct{}{}
 								}
 							}
 						}
 					}
 				}
 			}
-			emf.AWS = aws
 		}
 	}
+	emf.AWS = aws
 
 	for key, value := range record {
 		strKey := utils.ToString(key)
@@ -139,31 +146,15 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 			continue
 		default:
 			// Check if this is a metric value
-			isMetric := false
-			if emf.AWS != nil {
-				for _, metricDef := range emf.AWS.CloudWatchMetrics {
-					for _, metric := range metricDef.Metrics {
-						if metric.Name == strKey {
-							isMetric = true
-							metricValue := parseMetricValue(value)
-							if !isValidMetric(&metricValue) {
-								log.Warn().Printf("Found invalid metric %s with value %v\n; original: %v", strKey, metricValue, value)
-								continue
-							}
-							emf.MetricData[strKey] = metricValue
-							break
-						}
-					}
-					if isMetric {
-						break
-					}
+			if _, exists := metricSet[strKey]; exists {
+				metricValue := parseMetricValue(value)
+				if !isValidMetric(&metricValue) {
+					log.Warn().Printf("Found invalid metric %s with value %v\n; original: %v", strKey, metricValue, value)
+					continue
 				}
-			}
-
-			if !isMetric {
-				if _, present := dimensionSet[strKey]; present {
-					emf.Dimensions[strKey] = utils.ToString(value)
-				}
+				emf.MetricData[strKey] = metricValue
+			} else if _, exists := dimensionSet[strKey]; exists {
+				emf.Dimensions[strKey] = utils.ToString(value)
 			}
 		}
 	}
@@ -194,36 +185,26 @@ func parseMetricValue(value interface{}) common.MetricValue {
 			}
 		}
 		if min, ok := v["Min"]; ok {
-			value := utils.ConvertToFloat64(min)
-			mv.Min = &value
+			mv.Min = utils.ToPtr(utils.ConvertToFloat64(min))
 		}
 		if max, ok := v["Max"]; ok {
-			value := utils.ConvertToFloat64(max)
-			mv.Max = &value
+			mv.Max = utils.ToPtr(utils.ConvertToFloat64(max))
 		}
 		if sum, ok := v["Sum"]; ok {
-			value := utils.ConvertToFloat64(sum)
-			mv.Sum = &value
+			mv.Sum = utils.ToPtr(utils.ConvertToFloat64(sum))
 		}
 		if count, ok := v["Count"]; ok {
-			value := uint(utils.ConvertToUint(count))
-			mv.Count = &value
+			mv.Count = utils.ToPtr(uint(utils.ConvertToUint(count)))
 		}
 	default:
 		// Handle simple value
 		value := utils.ConvertToFloat64(v)
-		count := uint(1)
-		counts := []uint{1}
-		values := []float64{value}
-		max := value
-		min := value
-		sum := value
-		mv.Count = &count
-		mv.Counts = counts
-		mv.Max = &max
-		mv.Min = &min
-		mv.Sum = &sum
-		mv.Values = values
+		mv.Values = []float64{value}
+		mv.Counts = []uint{1}
+		mv.Count = utils.ToPtr(uint(1))
+		mv.Max = utils.ToPtr(value)
+		mv.Min = utils.ToPtr(value)
+		mv.Sum = utils.ToPtr(value)
 	}
 
 	return mv
