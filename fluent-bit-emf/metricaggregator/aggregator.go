@@ -12,12 +12,12 @@ type MetricAggregator interface {
 }
 
 type MetricStats struct {
-	Values []float64 `json:"Values,omitempty"`
-	Counts []uint    `json:"Counts,omitempty"`
-	Min    float64   `json:"Min,omitempty"`
-	Max    float64   `json:"Max,omitempty"`
-	Sum    float64   `json:"Sum,omitempty"`
-	Count  uint      `json:"Count,omitempty"`
+	Values []float64 `json:"Values"`
+	Counts []uint    `json:"Counts"`
+	Min    float64   `json:"Min"`
+	Max    float64   `json:"Max"`
+	Sum    float64   `json:"Sum"`
+	Count  uint      `json:"Count"`
 }
 
 func InitMetricAggregator(sample common.MetricValue) (MetricAggregator, error) {
