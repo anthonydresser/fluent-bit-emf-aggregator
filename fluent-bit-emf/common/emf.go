@@ -79,8 +79,7 @@ func (m *AWSMetadata) Merge(new *AWSMetadata) {
 	for _, attempt := range new.CloudWatchMetrics {
 		merged := false
 		for _, v := range m.CloudWatchMetrics {
-			merged = v.attemptMerge(&attempt)
-			if merged {
+			if merged = v.attemptMerge(&attempt); merged {
 				break
 			}
 		}

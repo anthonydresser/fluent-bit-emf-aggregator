@@ -89,20 +89,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 			Dimensions: emf.Dimensions,
 		}
 	} else {
-		// Store AWS metadata
-		if metadata.AWS == nil {
-			metadata.AWS = emf.AWS
-		} else {
-			metadata.AWS.Merge(emf.AWS)
-		}
-
-		// Store extra fields
-		for key, value := range emf.Dimensions {
-			// Only update if the field doesn't exist or is empty
-			if _, exists := metadata.Dimensions[key]; !exists {
-				metadata.Dimensions[key] = value
-			}
-		}
+		metadata.AWS.Merge(emf.AWS)
 	}
 
 	// Initialize metric map for this dimension set if not exists
