@@ -11,8 +11,8 @@ import (
 type dumbFlusher struct {
 }
 
-func (f *dumbFlusher) Flush(events []common.EMFEvent) (int, int, error) {
-	return 0, 0, nil
+func (f *dumbFlusher) Flush(events []common.EMFEvent) error {
+	return nil
 }
 
 // a very dumb benchmark to just clal aggregate with the same value over and over

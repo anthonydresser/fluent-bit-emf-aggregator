@@ -21,11 +21,6 @@ import (
 	"github.com/fluent/fluent-bit-go/output"
 )
 
-type InputStats struct {
-	InputLength  int
-	InputRecords int
-}
-
 // Plugin context
 type EMFAggregator struct {
 	mu                sync.RWMutex
@@ -34,7 +29,6 @@ type EMFAggregator struct {
 	metrics map[uint64]map[string]metricaggregator.MetricAggregator
 	// Store metadata and metric definitions
 	metadataStore map[uint64]Metadata
-	stats         InputStats
 
 	// flushing helpers
 	flusher flush.Flusher
@@ -63,9 +57,6 @@ func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EM
 func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 	dec := output.NewDecoder(data, length)
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	for {
 		ret, _, record := output.GetRecord(dec)
 		if ret != 0 {
@@ -82,13 +73,12 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 
 		// Aggregate the metric
 		a.AggregateMetric(emf)
-		a.stats.InputRecords++
 	}
-
-	a.stats.InputLength += length
 }
 
 func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	// Create dimension hash for grouping
 	dimHash := createDimensionHashFNV(emf.Dimensions)
 
@@ -197,22 +187,13 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	size, count, err := a.flusher.Flush(outputEvents)
-
-	if err != nil {
+	if err := a.flusher.Flush(outputEvents); err != nil {
 		return fmt.Errorf("error flushing: %w", err)
 	}
-
-	size_percentage := int(float64(a.stats.InputLength-size) / float64(a.stats.InputLength) * 100)
-	count_percentage := int(float64(a.stats.InputRecords-count) / float64(a.stats.InputRecords) * 100)
-
-	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[uint64]map[string]metricaggregator.MetricAggregator)
 	a.metadataStore = make(map[uint64]Metadata)
-	a.stats.InputLength = 0
-	a.stats.InputRecords = 0
 
 	log.Info().Println("Completed Flushing")
 	return nil

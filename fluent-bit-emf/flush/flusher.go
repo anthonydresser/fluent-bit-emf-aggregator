@@ -7,7 +7,7 @@ import (
 )
 
 type Flusher interface {
-	Flush(events []common.EMFEvent) (int, int, error)
+	Flush(events []common.EMFEvent) error
 }
 
 func InitFlusher(options *common.PluginOptions) (Flusher, error) {
