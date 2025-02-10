@@ -7,7 +7,6 @@ package emf
 */
 import (
 	"C"
-	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"sync"
@@ -80,7 +79,7 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// Create dimension hash for grouping
-	hash := generateHash(emf.Dimensions, emf.AWS.Timestamp)
+	hash := generateHash(emf.Dimensions)
 
 	// Initialize or update metadata store
 	if metadata, exists := a.metadataStore[hash]; !exists {
@@ -187,7 +186,7 @@ func (a *EMFAggregator) flush() error {
 }
 
 // Using FNV hash - fastest approach
-func generateHash(dimensions map[string]string, timestamp int64) uint64 {
+func generateHash(dimensions map[string]string) uint64 {
 	// Create hash
 	h := fnv.New64a()
 
@@ -196,10 +195,6 @@ func generateHash(dimensions map[string]string, timestamp int64) uint64 {
 		h.Write([]byte(key))
 		h.Write([]byte(value))
 	}
-
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(timestamp))
-	h.Write(b)
 
 	return h.Sum64()
 }

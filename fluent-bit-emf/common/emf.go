@@ -3,9 +3,8 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
-
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
 type EMFEvent struct {
@@ -52,7 +51,6 @@ func merge(old []MetricDefinition, new []MetricDefinition) {
 			old = append(old, attempt)
 		}
 	}
-
 }
 
 // we can only merge if the namespaces match and the dimension sets match
@@ -62,20 +60,23 @@ func (def *ProjectionDefinition) attemptMerge(new *ProjectionDefinition) bool {
 	if def.Namespace != new.Namespace {
 		return false
 	}
-	if utils.Every(def.Dimensions, func(val []string) bool {
-		return utils.Find(new.Dimensions, func(test []string) bool {
-			return strings.Join(val, ", ") == strings.Join(test, ", ")
-		}) != -1
-	}) {
-		merge(def.Metrics, new.Metrics)
-		return true
-	} else {
-		return false
-	}
+	// for now because of how we generate the hash we can skip this check
+	merge(def.Metrics, new.Metrics)
+	return true
+	// if utils.Every(def.Dimensions, func(val []string) bool {
+	// 	return utils.Find(new.Dimensions, func(test []string) bool {
+	// 		return strings.Join(val, ", ") == strings.Join(test, ", ")
+	// 	}) != -1
+	// }) {
+	// 	merge(def.Metrics, new.Metrics)
+	// 	return true
+	// } else {
+	// 	return false
+	// }
 }
 
 func (m *AWSMetadata) Merge(new *AWSMetadata) {
-	m.Timestamp = new.Timestamp
+	m.Timestamp = int64(math.Min(float64(m.Timestamp), float64(new.Timestamp)))
 	for _, attempt := range new.CloudWatchMetrics {
 		merged := false
 		for _, v := range m.CloudWatchMetrics {
