@@ -137,6 +137,12 @@ func (m MetricValue) String() string {
 			} else {
 				b.WriteString(fmt.Sprintf("%v", *v))
 			}
+		case *uint:
+			if v == nil {
+				b.WriteString("nil")
+			} else {
+				b.WriteString(fmt.Sprintf("%v", *v))
+			}
 		default:
 			b.WriteString("nil")
 		}
