@@ -20,7 +20,7 @@ func newHistogram() *histogram {
 	}
 }
 
-func (va *histogram) Add(metric common.MetricValue) {
+func (va *histogram) Add(metric common.MetricValue) error {
 	if metric.Value != nil {
 		va.add(*metric.Value, 1)
 	} else if len(metric.Counts) > 0 && len(metric.Values) > 0 {
@@ -30,8 +30,9 @@ func (va *histogram) Add(metric common.MetricValue) {
 	} else if metric.Count != nil && metric.Max != nil && metric.Min != nil && *metric.Min == *metric.Max {
 		va.add(*metric.Min, *metric.Count)
 	} else {
-		panic(fmt.Sprintf("invalid metric: %v", metric))
+		return fmt.Errorf("invalid metric: %v", metric)
 	}
+	return nil
 }
 
 func (va *histogram) add(value float64, count uint) {

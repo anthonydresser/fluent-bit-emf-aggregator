@@ -131,7 +131,10 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 			a.metrics[dimHash][name] = aggregator
 		}
 
-		a.metrics[dimHash][name].Add(value)
+		err := a.metrics[dimHash][name].Add(value)
+		if err != nil {
+			log.Error().Printf("failed to add metric %s sample: %v\n", name, err)
+		}
 	}
 }
 

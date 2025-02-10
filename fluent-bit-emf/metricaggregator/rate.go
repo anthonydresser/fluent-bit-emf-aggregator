@@ -22,7 +22,7 @@ func newRateAggregator() *rateAggregator {
 	}
 }
 
-func (r *rateAggregator) Add(metric common.MetricValue) {
+func (r *rateAggregator) Add(metric common.MetricValue) error {
 	r.sum += *metric.Sum
 	r.count += *metric.Count
 	if *metric.Max > r.max {
@@ -31,6 +31,7 @@ func (r *rateAggregator) Add(metric common.MetricValue) {
 	if *metric.Min < r.min {
 		r.min = *metric.Min
 	}
+	return nil
 }
 
 func (r *rateAggregator) Reduce() *MetricStats {

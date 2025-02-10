@@ -7,7 +7,7 @@ import (
 )
 
 type MetricAggregator interface {
-	Add(val common.MetricValue)
+	Add(val common.MetricValue) error
 	Reduce() *MetricStats
 }
 
