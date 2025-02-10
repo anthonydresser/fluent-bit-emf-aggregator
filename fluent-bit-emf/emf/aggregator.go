@@ -7,9 +7,9 @@ package emf
 */
 import (
 	"C"
+	"encoding/binary"
 	"fmt"
 	"hash/fnv"
-	"sort"
 	"sync"
 	"time"
 	"unsafe"
@@ -80,11 +80,11 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// Create dimension hash for grouping
-	dimHash := createDimensionHashFNV(emf.Dimensions)
+	hash := generateHash(emf.Dimensions, emf.AWS.Timestamp)
 
 	// Initialize or update metadata store
-	if metadata, exists := a.metadataStore[dimHash]; !exists {
-		a.metadataStore[dimHash] = Metadata{
+	if metadata, exists := a.metadataStore[hash]; !exists {
+		a.metadataStore[hash] = Metadata{
 			AWS:        emf.AWS,
 			Dimensions: emf.Dimensions,
 		}
@@ -93,22 +93,22 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 	}
 
 	// Initialize metric map for this dimension set if not exists
-	if _, exists := a.metrics[dimHash]; !exists {
-		a.metrics[dimHash] = make(map[string]metricaggregator.MetricAggregator)
+	if _, exists := a.metrics[hash]; !exists {
+		a.metrics[hash] = make(map[string]metricaggregator.MetricAggregator)
 	}
 
 	// Aggregate each metric
 	for name, value := range emf.MetricData {
-		if _, exists := a.metrics[dimHash][name]; !exists {
+		if _, exists := a.metrics[hash][name]; !exists {
 			aggregator, err := metricaggregator.InitMetricAggregator(value)
 			if err != nil {
 				log.Error().Printf("failed to initialize metric aggregator: %v\n", err)
 				continue
 			}
-			a.metrics[dimHash][name] = aggregator
+			a.metrics[hash][name] = aggregator
 		}
 
-		err := a.metrics[dimHash][name].Add(value)
+		err := a.metrics[hash][name].Add(value)
 		if err != nil {
 			log.Error().Printf("failed to add metric %s sample: %v\n", name, err)
 		}
@@ -187,26 +187,19 @@ func (a *EMFAggregator) flush() error {
 }
 
 // Using FNV hash - fastest approach
-func createDimensionHashFNV(dimensions map[string]string) uint64 {
-	if len(dimensions) == 0 {
-		return 0
-	}
-
-	// Create a slice of keys to sort
-	keys := make([]string, 0, len(dimensions))
-	for k := range dimensions {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
+func generateHash(dimensions map[string]string, timestamp int64) uint64 {
 	// Create hash
 	h := fnv.New64a()
 
 	// Write sorted keys and values
-	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write([]byte(dimensions[k]))
+	for key, value := range dimensions {
+		h.Write([]byte(key))
+		h.Write([]byte(value))
 	}
+
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(timestamp))
+	h.Write(b)
 
 	return h.Sum64()
 }
