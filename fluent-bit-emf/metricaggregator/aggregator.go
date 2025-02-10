@@ -26,8 +26,6 @@ func InitMetricAggregator(sample common.MetricValue) (MetricAggregator, error) {
 		return newHistogram(), nil
 	} else if len(sample.Counts) > 0 && len(sample.Values) > 0 {
 		return newHistogram(), nil
-	} else if sample.Count != nil && sample.Max != nil && sample.Min != nil && *sample.Min == *sample.Max {
-		return newHistogram(), nil
 	} else if sample.Sum != nil && sample.Count != nil && sample.Max != nil && sample.Min != nil {
 		return newRateAggregator(), nil
 	}
