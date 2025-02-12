@@ -1,75 +1,60 @@
 package metricaggregator
 
 import (
-	"fmt"
-
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
 type histogram struct {
 	// internal
-	values []float64
-	counts []uint
+	counts map[float64]uint
 }
 
 func newHistogram() *histogram {
 	return &histogram{
-		values: make([]float64, 0),
-		counts: make([]uint, 0),
+		counts: make(map[float64]uint, 0),
 	}
 }
 
-func (va *histogram) Add(metric common.MetricValue) error {
-	if len(metric.Counts) > 0 && len(metric.Values) > 0 {
-		for i, value := range metric.Values {
-			va.add(value, metric.Counts[i])
-		}
-	} else if metric.Count != nil && metric.Max != nil && metric.Min != nil && *metric.Min == *metric.Max {
-		va.add(*metric.Min, *metric.Count)
-	} else {
-		return fmt.Errorf("invalid metric: %v", metric)
+func (va *histogram) Add(metric *common.MetricValue) error {
+	for i, value := range metric.Values {
+		va.counts[value] += metric.Counts[i]
 	}
 	return nil
 }
 
-func (va *histogram) add(value float64, count uint) {
-	for i := 0; i < len(va.values); i++ {
-		if va.values[i] == value {
-			va.counts[i] += count
-			return
-		}
-	}
-	va.values = append(va.values, value)
-	va.counts = append(va.counts, count)
-}
-
 func (va *histogram) Reduce() *MetricStats {
-	switch len(va.values) {
+	counts := make([]uint, 0, len(va.counts))
+	values := make([]float64, 0, len(va.counts))
+	for key, count := range va.counts {
+		counts = append(counts, count)
+		values = append(values, key)
+	}
+	switch len(va.counts) {
 	case 0:
 		return nil
 	case 1:
 		return &MetricStats{
-			Values: []float64{va.values[0]},
-			Counts: []uint{va.counts[0]},
-			Min:    va.values[0],
-			Max:    va.values[0],
-			Sum:    float64(va.values[0]) * float64(va.counts[0]),
+			Values: []float64{values[0]},
+			Counts: []uint{counts[0]},
+			Min:    values[0],
+			Max:    values[0],
+			Sum:    float64(values[0]) * float64(va.counts[0]),
 			Count:  va.counts[0],
 		}
 	case 2:
 		return &MetricStats{
-			Values: []float64{va.values[0], va.values[1]},
+			Values: []float64{values[0], values[1]},
 			Counts: []uint{va.counts[0], va.counts[1]},
-			Min:    utils.Min(va.values[0], va.values[1]),
-			Max:    utils.Max(va.values[0], va.values[1]),
-			Sum:    float64(va.values[0])*float64(va.counts[0]) + float64(va.values[1])*float64(va.counts[1]),
+			Min:    utils.Min(values[0], values[1]),
+			Max:    utils.Max(values[0], values[1]),
+			Sum:    float64(values[0])*float64(va.counts[0]) + float64(values[1])*float64(va.counts[1]),
 			Count:  va.counts[0] + va.counts[1],
 		}
 	default:
 		histogram := NewExponentialHistogram()
-		for i := range va.values {
-			histogram.Add(va.values[i], va.counts[i])
+		for i := range values {
+			histogram.Add(values[i], counts[i])
 		}
 		if histogram.max == histogram.min {
 			return &MetricStats{

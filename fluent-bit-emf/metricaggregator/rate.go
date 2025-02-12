@@ -22,14 +22,14 @@ func newRateAggregator() *rateAggregator {
 	}
 }
 
-func (r *rateAggregator) Add(metric common.MetricValue) error {
-	r.sum += *metric.Sum
-	r.count += *metric.Count
-	if *metric.Max > r.max {
-		r.max = *metric.Max
+func (r *rateAggregator) Add(metric *common.MetricValue) error {
+	r.sum += metric.Sum
+	r.count += metric.Count
+	if metric.Max > r.max {
+		r.max = metric.Max
 	}
-	if *metric.Min < r.min {
-		r.min = *metric.Min
+	if metric.Min < r.min {
+		r.min = metric.Min
 	}
 	return nil
 }

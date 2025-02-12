@@ -27,7 +27,7 @@ type EMFAggregator struct {
 	// Map of dimension hash -> metric name -> aggregated values
 	metrics map[uint64]map[string]metricaggregator.MetricAggregator
 	// Store metadata and metric definitions
-	metadataStore map[uint64]Metadata
+	metadataStore map[uint64]*Metadata
 
 	// flushing helpers
 	flusher flush.Flusher
@@ -43,7 +43,7 @@ func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EM
 	aggregator := &EMFAggregator{
 		aggregationPeriod: options.AggregationPeriod,
 		metrics:           make(map[uint64]map[string]metricaggregator.MetricAggregator),
-		metadataStore:     make(map[uint64]Metadata),
+		metadataStore:     make(map[uint64]*Metadata),
 		flusher:           flusher,
 	}
 
@@ -56,6 +56,9 @@ func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EM
 func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 	dec := output.NewDecoder(data, length)
 
+	// Pre-allocate a slice if you know approximate size
+	records := make([]*EMFMetric, 0, 60) // adjust capacity based on typical usage
+
 	for {
 		ret, _, record := output.GetRecord(dec)
 		if ret != 0 {
@@ -65,25 +68,29 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 		// Create EMF metric directly from record
 		emf, err := EmfFromRecord(record)
 
+		records = append(records, emf)
+
 		if err != nil {
 			log.Error().Printf("failed to process EMF record: %v\n", err)
 			continue
 		}
+	}
 
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, record := range records {
 		// Aggregate the metric
-		a.AggregateMetric(emf)
+		a.AggregateMetric(record)
 	}
 }
 
 func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	// Create dimension hash for grouping
 	hash := generateHash(emf.Dimensions)
 
 	// Initialize or update metadata store
 	if metadata, exists := a.metadataStore[hash]; !exists {
-		a.metadataStore[hash] = Metadata{
+		a.metadataStore[hash] = &Metadata{
 			AWS:        emf.AWS,
 			Dimensions: emf.Dimensions,
 		}
@@ -115,9 +122,9 @@ func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
 }
 
 func (a *EMFAggregator) flush() error {
-	log.Info().Println("Flushing")
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	log.Info().Println("Flushing")
 
 	if len(a.metrics) == 0 {
 		log.Info().Println("No metrics to flush, skipping")
@@ -179,7 +186,7 @@ func (a *EMFAggregator) flush() error {
 
 	// Reset metrics after successful flush
 	a.metrics = make(map[uint64]map[string]metricaggregator.MetricAggregator)
-	a.metadataStore = make(map[uint64]Metadata)
+	a.metadataStore = make(map[uint64]*Metadata)
 
 	log.Info().Println("Completed Flushing")
 	return nil

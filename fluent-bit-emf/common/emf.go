@@ -13,8 +13,8 @@ type EMFEvent struct {
 }
 
 type AWSMetadata struct {
-	Timestamp         int64                  `json:"Timestamp,omitempty"`
-	CloudWatchMetrics []ProjectionDefinition `json:"CloudWatchMetrics"`
+	Timestamp         int64                   `json:"Timestamp,omitempty"`
+	CloudWatchMetrics []*ProjectionDefinition `json:"CloudWatchMetrics"`
 }
 
 type MetricDefinition struct {
@@ -23,9 +23,9 @@ type MetricDefinition struct {
 }
 
 type ProjectionDefinition struct {
-	Namespace  string             `json:"Namespace"`
-	Dimensions [][]string         `json:"Dimensions"`
-	Metrics    []MetricDefinition `json:"Metrics"`
+	Namespace  string              `json:"Namespace"`
+	Dimensions [][]string          `json:"Dimensions"`
+	Metrics    []*MetricDefinition `json:"Metrics"`
 }
 
 func (e EMFEvent) MarshalJSON() ([]byte, error) {
@@ -38,7 +38,7 @@ func (e EMFEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(output)
 }
 
-func merge(old []MetricDefinition, new []MetricDefinition) {
+func merge(old []*MetricDefinition, new []*MetricDefinition) {
 	for _, attempt := range new {
 		exists := false
 		for _, v := range old {
@@ -80,7 +80,7 @@ func (m *AWSMetadata) Merge(new *AWSMetadata) {
 	for _, attempt := range new.CloudWatchMetrics {
 		merged := false
 		for _, v := range m.CloudWatchMetrics {
-			if merged = v.attemptMerge(&attempt); merged {
+			if merged = v.attemptMerge(attempt); merged {
 				break
 			}
 		}
@@ -93,10 +93,10 @@ func (m *AWSMetadata) Merge(new *AWSMetadata) {
 type MetricValue struct {
 	Values []float64
 	Counts []uint
-	Min    *float64
-	Max    *float64
-	Sum    *float64
-	Count  *uint
+	Min    float64
+	Max    float64
+	Sum    float64
+	Count  uint
 }
 
 func (m MetricValue) String() string {
