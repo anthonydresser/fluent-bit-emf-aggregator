@@ -59,6 +59,18 @@ type MockCloudWatchLogs struct {
 
 type CustomWriter struct{}
 
+func (f CustomWriter) Write(bytes []byte) (int, error) {
+	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
+}
+
+func NewMockCloudWatchLogs() *MockCloudWatchLogs {
+	return &MockCloudWatchLogs{
+		logGroups:  make(map[string]map[string]*LogStream),
+		tokens:     make(map[string]int),
+		errorCount: 0,
+	}
+}
+
 type Metric struct {
 	Name              string `json:"Name"`
 	Unit              string `json:"Unit"`
@@ -77,19 +89,7 @@ type AWSMetadata struct {
 
 type EMFEvent struct {
 	AWS         AWSMetadata            `json:"_aws"`
-	OtherFields map[string]interface{} `json:",inline"`
-}
-
-func (f CustomWriter) Write(bytes []byte) (int, error) {
-	return fmt.Print("[" + time.Now().UTC().Format("2006/01/02 15:04:05") + "] " + string(bytes))
-}
-
-func NewMockCloudWatchLogs() *MockCloudWatchLogs {
-	return &MockCloudWatchLogs{
-		logGroups:  make(map[string]map[string]*LogStream),
-		tokens:     make(map[string]int),
-		errorCount: 0,
-	}
+	OtherFields map[string]interface{} `json:"inline"`
 }
 
 // AWS v2 SDK expects responses to include these fields
@@ -139,33 +139,43 @@ func (m *MockCloudWatchLogs) handleCreateLogStream(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(resp)
 }
 
-func validateEvent(event EMFEvent) error {
+func validateEvent(event map[string]interface{}) error {
 	expectedDimensions := make(map[string]struct{})
 	expectedMetrics := make(map[string]struct{})
+	var awsMetadata AWSMetadata
 
-	for _, metric := range event.AWS.CloudWatchMetrics {
-		for _, dimension := range metric.Dimensions {
+	if bytes, err := json.Marshal(event["_aws"]); err == nil {
+		err = json.Unmarshal(bytes, &awsMetadata)
+		if err != nil {
+			return fmt.Errorf("invalid _aws field: %v", err)
+		}
+	} else {
+		return fmt.Errorf("invalid _aws field: %v, %v", err, event["_aws"])
+	}
+
+	for _, cloudwatchMetric := range awsMetadata.CloudWatchMetrics {
+		for _, dimension := range cloudwatchMetric.Dimensions {
 			for _, value := range dimension {
 				expectedDimensions[value] = struct{}{}
 			}
 		}
-		for _, metric := range metric.Metrics {
+		for _, metric := range cloudwatchMetric.Metrics {
 			expectedMetrics[metric.Name] = struct{}{}
 		}
 	}
 
 	if len(expectedMetrics) == 0 {
-		return fmt.Errorf("no metrics found")
+		return fmt.Errorf("no metrics found %v", event)
 	}
 
 	for key := range expectedMetrics {
-		if _, exists := event.OtherFields[key]; !exists {
-			return fmt.Errorf("missing metric %s", key)
+		if _, exists := event[key]; !exists {
+			return fmt.Errorf("missing metric %s in %v", key, event)
 		}
 	}
 	for key := range expectedDimensions {
-		if _, exists := event.OtherFields[key]; !exists {
-			return fmt.Errorf("missing dimension %s", key)
+		if _, exists := event[key]; !exists {
+			return fmt.Errorf("missing dimension %s in %v", key, event)
 		}
 	}
 	return nil
@@ -206,7 +216,7 @@ func (m *MockCloudWatchLogs) handlePutLogEvents(w http.ResponseWriter, r *http.R
 	rawEvents, err := json.Marshal(req.LogEvents)
 
 	for _, event := range req.LogEvents {
-		var emfEvent EMFEvent
+		var emfEvent map[string]interface{}
 		if err := json.Unmarshal([]byte(event.Message), &emfEvent); err != nil {
 			m.sendErrorResponse(w, "InternalFailure", err.Error(), http.StatusInternalServerError)
 			return
@@ -254,6 +264,9 @@ func (m *MockCloudWatchLogs) validateAWSHeaders(w http.ResponseWriter, r *http.R
 }
 
 func (m *MockCloudWatchLogs) sendErrorResponse(w http.ResponseWriter, code, message string, status int) {
+
+	log.Printf("[debug] Handling error %s: %s", code, message)
+
 	m.mu.Lock()
 	m.errorCount++
 	m.mu.Unlock()
@@ -303,8 +316,10 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	server := &http.Server{
-		Addr:    port,
-		Handler: mux,
+		Addr:         port,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
 	}
 
 	// Update paths to match AWS SDK v2 expectations

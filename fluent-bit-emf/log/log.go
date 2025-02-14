@@ -21,6 +21,7 @@ type Logger struct {
 	Info  *levelLogger
 	Warn  *levelLogger
 	Error *levelLogger
+	Log   *levelLogger
 }
 
 type levelLogger struct {
@@ -37,6 +38,7 @@ func Debug() *levelLogger { return defaultLogger.Debug }
 func Info() *levelLogger  { return defaultLogger.Info }
 func Warn() *levelLogger  { return defaultLogger.Warn }
 func Error() *levelLogger { return defaultLogger.Error }
+func Log() *levelLogger   { return defaultLogger.Log }
 
 // Function to change the default logger's level
 func SetLevel(level Level) {

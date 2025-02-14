@@ -1,74 +1,84 @@
 package common
 
 import (
-	"strings"
+	"encoding/json"
+	"math"
+	"sync"
 
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
+	"golang.org/x/exp/maps"
+)
+
+var (
+	emfEventPool = sync.Pool{
+		New: func() any {
+			return &EMFEvent{
+				AWS:         &AWSMetadata{},
+				OtherFields: make(map[string]interface{}),
+			}
+		},
+	}
 )
 
 type EMFEvent struct {
-	AWS         *AWSMetadata           `json:"_aws"`
-	OtherFields map[string]interface{} `json:",inline"`
+	AWS         *AWSMetadata
+	OtherFields map[string]interface{}
+}
+
+func GetEmfEventStruct() *EMFEvent {
+	return emfEventPool.Get().(*EMFEvent)
+}
+
+func (e *EMFEvent) Close() {
+	maps.Clear(e.OtherFields)
+	e.AWS.Close()
+	emfEventPool.Put(e)
 }
 
 type AWSMetadata struct {
-	Timestamp         int64                  `json:"Timestamp,omitempty"`
-	CloudWatchMetrics []ProjectionDefinition `json:"CloudWatchMetrics"`
+	Timestamp         int64                   `json:"Timestamp"`
+	CloudWatchMetrics []*ProjectionDefinition `json:"CloudWatchMetrics"`
 }
 
-type MetricDefinition struct {
-	Name string `json:"Name"`
-	Unit string `json:"Unit,omitempty"`
-}
-
-type ProjectionDefinition struct {
-	Namespace  string             `json:"Namespace"`
-	Dimensions [][]string         `json:"Dimensions"`
-	Metrics    []MetricDefinition `json:"Metrics"`
-}
-
-func merge(old []MetricDefinition, new []MetricDefinition) {
-	for _, attempt := range new {
-		exists := false
-		for _, v := range old {
-			if v.Name == attempt.Name && v.Unit == attempt.Unit {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			old = append(old, attempt)
-		}
+func (e *AWSMetadata) Close() {
+	for _, val := range e.CloudWatchMetrics {
+		val.close()
 	}
-
 }
 
-// we can only merge if the namespaces match and the dimension sets match
-// even if the namespaces match, if the dimensions aren't the same we risk
-// emitting metrics under dimensions they weren't intended to be emitted under
-func (def *ProjectionDefinition) attemptMerge(new *ProjectionDefinition) bool {
-	if def.Namespace != new.Namespace {
-		return false
-	}
-	if utils.Every(def.Dimensions, func(val []string) bool {
-		return utils.Find(new.Dimensions, func(test []string) bool {
-			return strings.Join(val, ", ") == strings.Join(test, ", ")
-		}) != -1
-	}) {
-		merge(def.Metrics, new.Metrics)
-		return true
+func (e *AWSMetadata) Resize(size int) {
+	if cap(e.CloudWatchMetrics) < size {
+		e.CloudWatchMetrics = make([]*ProjectionDefinition, size)
 	} else {
-		return false
+		e.CloudWatchMetrics = e.CloudWatchMetrics[:size]
 	}
+}
+
+func (m *AWSMetadata) FillFrom(from *AWSMetadata) {
+	m.Timestamp = from.Timestamp
+	m.Resize(len(from.CloudWatchMetrics))
+	for i, val := range from.CloudWatchMetrics {
+		holder := GetProjectionStruct()
+		holder.FillFrom(val)
+		m.CloudWatchMetrics[i] = holder
+	}
+}
+
+func (e EMFEvent) MarshalJSON() ([]byte, error) {
+	output := make(map[string]interface{})
+	output["_aws"] = e.AWS
+
+	for k, v := range e.OtherFields {
+		output[k] = v
+	}
+	return json.Marshal(output)
 }
 
 func (m *AWSMetadata) Merge(new *AWSMetadata) {
-	m.Timestamp = new.Timestamp
+	m.Timestamp = int64(math.Min(float64(m.Timestamp), float64(new.Timestamp)))
 	for _, attempt := range new.CloudWatchMetrics {
 		merged := false
 		for _, v := range m.CloudWatchMetrics {
-			merged = v.attemptMerge(&attempt)
-			if merged {
+			if merged = v.attemptMerge(attempt); merged {
 				break
 			}
 		}

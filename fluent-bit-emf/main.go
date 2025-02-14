@@ -12,13 +12,14 @@ import (
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/emf"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
 	"github.com/fluent/fluent-bit-go/output"
 )
 
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	log.Init("emf-aggregator", 0)
+	log.Init("emf-aggregator", log.DebugLevel)
 	return output.FLBPluginRegister(def, "emf_aggregator", "EMF File Aggregator")
 }
 
@@ -33,24 +34,47 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 	options.LogStreamName = output.FLBPluginConfigKey(plugin, "log_stream_name")
 	options.CloudWatchEndpoint = output.FLBPluginConfigKey(plugin, "endpoint")
 	options.Protocol = output.FLBPluginConfigKey(plugin, "protocol")
+	logLevel := output.FLBPluginConfigKey(plugin, "level_log")
+
+	switch logLevel {
+	case "":
+		log.SetLevel(log.WarnLevel)
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	default:
+		log.Warn().Printf("Invalid log level: %s, using default warn\n", logLevel)
+		log.SetLevel(log.WarnLevel)
+	}
 
 	period := output.FLBPluginConfigKey(plugin, "aggregation_period")
 	if period == "" {
-		log.Info().Println("AggregationPeriod not set, defaulting to 1m")
+		log.Warn().Println("AggregationPeriod not set, defaulting to 1m")
 		period = "1m"
 	}
 
 	aggregationPeriod, err := time.ParseDuration(period)
 	if err != nil {
-		log.Info().Printf("invalid aggregation period: %v\n", err)
+		log.Error().Printf("invalid aggregation period: %v\n", err)
 		return output.FLB_ERROR
 	}
 
 	options.AggregationPeriod = aggregationPeriod
 
-	aggregator, err := emf.NewEMFAggregator(&options)
+	var flusher flush.Flusher
+
+	if flusher, err = flush.InitFlusher(&options); err != nil {
+		log.Error().Printf("failed to initialize flusher: %v\n", err)
+	}
+
+	aggregator, err := emf.NewEMFAggregator(&options, flusher)
 	if err != nil {
-		log.Info().Printf("failed to create EMFAggregator: %v\n", err)
+		log.Error().Printf("failed to create EMFAggregator: %v\n", err)
 		return output.FLB_ERROR
 	}
 

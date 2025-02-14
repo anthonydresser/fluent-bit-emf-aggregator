@@ -8,37 +8,52 @@ package emf
 import (
 	"C"
 	"fmt"
-	"sort"
-	"strings"
+	"hash/fnv"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/common"
-	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/histogram"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/log"
+	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/metricaggregator"
 	"github.com/fluent/fluent-bit-go/output"
+	"golang.org/x/exp/maps"
 )
-import "github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/flush"
-
-type InputStats struct {
-	InputLength  int
-	InputRecords int
-}
 
 // Plugin context
 type EMFAggregator struct {
 	mu                sync.RWMutex
 	aggregationPeriod time.Duration
 	// Map of dimension hash -> metric name -> aggregated values
-	metrics map[string]map[string]*histogram.Histogram
+	metrics map[uint64]map[string]metricaggregator.MetricAggregator
 	// Store metadata and metric definitions
-	metadataStore map[string]Metadata
-	stats         InputStats
+	metadataStore map[uint64]*Metadata
 
 	// flushing helpers
 	flusher flush.Flusher
 	Task    *ScheduledTask
+}
+
+var (
+	metadataPool = sync.Pool{
+		New: func() any {
+			return &Metadata{
+				AWS:        &common.AWSMetadata{},
+				Dimensions: make(map[string]string),
+			}
+		},
+	}
+)
+
+func (m *Metadata) Close() {
+	m.AWS.Close()
+	maps.Clear(m.Dimensions)
+	metadataPool.Put(m)
+}
+
+func getMetadataStruct() *Metadata {
+	return metadataPool.Get().(*Metadata)
 }
 
 type Metadata struct {
@@ -46,17 +61,12 @@ type Metadata struct {
 	Dimensions map[string]string
 }
 
-func NewEMFAggregator(options *common.PluginOptions) (*EMFAggregator, error) {
+func NewEMFAggregator(options *common.PluginOptions, flusher flush.Flusher) (*EMFAggregator, error) {
 	aggregator := &EMFAggregator{
 		aggregationPeriod: options.AggregationPeriod,
-		metrics:           make(map[string]map[string]*histogram.Histogram),
-		metadataStore:     make(map[string]Metadata),
-	}
-
-	var err error
-
-	if aggregator.flusher, err = flush.InitFlusher(options); err != nil {
-		return nil, err
+		metrics:           make(map[uint64]map[string]metricaggregator.MetricAggregator),
+		metadataStore:     make(map[uint64]*Metadata),
+		flusher:           flusher,
 	}
 
 	aggregator.Task = NewScheduledTask(options.AggregationPeriod, aggregator.flush)
@@ -68,8 +78,8 @@ func NewEMFAggregator(options *common.PluginOptions) (*EMFAggregator, error) {
 func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 	dec := output.NewDecoder(data, length)
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	// Pre-allocate a slice if you know approximate size
+	records := make([]*common.EMFReport, 0, 60) // adjust capacity based on typical usage
 
 	for {
 		ret, _, record := output.GetRecord(dec)
@@ -77,110 +87,90 @@ func (a *EMFAggregator) Aggregate(data unsafe.Pointer, length int) {
 			break
 		}
 
+		emf := common.GetEmfStruct()
+
 		// Create EMF metric directly from record
-		emf, err := EmfFromRecord(record)
+		err := FillEmfFromRecord(record, emf)
+
+		records = append(records, emf)
 
 		if err != nil {
 			log.Error().Printf("failed to process EMF record: %v\n", err)
+			emf.Close()
 			continue
 		}
-
-		// Aggregate the metric
-		a.AggregateMetric(emf)
-		a.stats.InputRecords++
 	}
 
-	a.stats.InputLength += length
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, record := range records {
+		// Aggregate the metric
+		a.AggregateMetric(record)
+		record.Close()
+	}
 }
 
-func (a *EMFAggregator) AggregateMetric(emf *EMFMetric) {
+func (a *EMFAggregator) AggregateMetric(emf *common.EMFReport) {
 	// Create dimension hash for grouping
-	dimHash := createDimensionHash(emf.Dimensions)
+	hash := generateHash(emf.Dimensions)
 
 	// Initialize or update metadata store
-	if metadata, exists := a.metadataStore[dimHash]; !exists {
-		a.metadataStore[dimHash] = Metadata{
-			AWS:        emf.AWS,
-			Dimensions: emf.Dimensions,
-		}
-	} else {
-		// Store AWS metadata
-		if metadata.AWS == nil {
-			metadata.AWS = emf.AWS
-		} else {
-			metadata.AWS.Merge(emf.AWS)
-		}
-
-		// Store extra fields
+	if metadata, exists := a.metadataStore[hash]; !exists {
+		metadata = getMetadataStruct()
+		metadata.AWS.FillFrom(emf.AWS)
 		for key, value := range emf.Dimensions {
-			// Only update if the field doesn't exist or is empty
-			if _, exists := metadata.Dimensions[key]; !exists {
-				metadata.Dimensions[key] = value
-			}
+			metadata.Dimensions[key] = value
 		}
+		a.metadataStore[hash] = metadata
+	} else {
+		metadata.AWS.Merge(emf.AWS)
 	}
 
 	// Initialize metric map for this dimension set if not exists
-	if _, exists := a.metrics[dimHash]; !exists {
-		a.metrics[dimHash] = make(map[string]*histogram.Histogram)
+	if _, exists := a.metrics[hash]; !exists {
+		a.metrics[hash] = make(map[string]metricaggregator.MetricAggregator)
 	}
 
 	// Aggregate each metric
 	for name, value := range emf.MetricData {
-		if _, exists := a.metrics[dimHash][name]; !exists {
-			a.metrics[dimHash][name] = histogram.NewHistogram()
-		}
-
-		metric := a.metrics[dimHash][name]
-
-		if value.Value != nil {
-			metric.Add(*value.Value, 1)
-		} else if value.Values == nil {
-			if value.Max != nil && value.Min == value.Max {
-				metric.Add(*value.Max, *value.Count)
-			} else {
-				log.Warn().Printf("Invalid metric value found for metric %s: %v\n", name, value)
+		if _, exists := a.metrics[hash][name]; !exists {
+			aggregator, err := metricaggregator.InitMetricAggregator(value)
+			if err != nil {
+				log.Error().Printf("failed to initialize metric aggregator: %v\n", err)
 				continue
 			}
-		} else {
-			for index, v := range value.Values {
-				metric.Add(v, value.Counts[index])
-			}
+			a.metrics[hash][name] = aggregator
+		}
+
+		err := a.metrics[hash][name].Add(value)
+		if err != nil {
+			log.Error().Printf("failed to add metric %s sample: %v\n", name, err)
 		}
 	}
 }
 
 func (a *EMFAggregator) flush() error {
-	log.Info().Println("Flushing")
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	log.Info().Println("Flushing")
 
 	if len(a.metrics) == 0 {
 		log.Info().Println("No metrics to flush, skipping")
 		return nil
 	}
 
-	outputEvents := make([]common.EMFEvent, 0, len(a.metrics))
+	outputEvents := make([]*common.EMFEvent, 0, len(a.metrics))
 
 	for dimHash, metricMap := range a.metrics {
 		// Get the metadata for this dimension set
 		metadata, exists := a.metadataStore[dimHash]
 		if !exists {
-			log.Warn().Printf("No metadata found for dimension hash %s\n", dimHash)
+			log.Warn().Println("No metadata found for hash")
 			continue
 		}
 
-		// Skip if no AWS metadata is available
-		if metadata.AWS == nil {
-			log.Warn().Printf("No AWS metadata found for dimension hash %s\n", dimHash)
-			continue
-		}
-
-		// Create output map with string keys
-		outputMap := common.EMFEvent{
-			AWS:         metadata.AWS,
-			OtherFields: make(map[string]interface{}),
-		}
+		outputMap := common.GetEmfEventStruct()
+		outputMap.AWS.FillFrom(metadata.AWS)
 
 		// Add all metric values
 		for name, value := range metricMap {
@@ -189,7 +179,7 @@ func (a *EMFAggregator) flush() error {
 				log.Warn().Printf("No stats found for metric %s\n", name)
 				continue
 			}
-			if len(stats.Values) == 1 {
+			if stats.Count == 1 {
 				// Single value
 				outputMap.OtherFields[name] = stats.Max
 			} else {
@@ -209,40 +199,34 @@ func (a *EMFAggregator) flush() error {
 		return nil
 	}
 
-	size, count, err := a.flusher.Flush(outputEvents)
-
-	if err != nil {
+	if err := a.flusher.Flush(outputEvents); err != nil {
 		return fmt.Errorf("error flushing: %w", err)
 	}
 
-	size_percentage := int(float64(a.stats.InputLength-size) / float64(a.stats.InputLength) * 100)
-	count_percentage := int(float64(a.stats.InputRecords-count) / float64(a.stats.InputRecords) * 100)
+	for _, val := range outputEvents {
+		val.Close()
+	}
 
-	log.Info().Printf("Compressed %d bytes into %d bytes or %d%%; and %d Records into %d or %d%%\n", a.stats.InputLength, size, size_percentage, a.stats.InputRecords, count, count_percentage)
-
-	// Reset metrics after successful flush
-	a.metrics = make(map[string]map[string]*histogram.Histogram)
-	a.metadataStore = make(map[string]Metadata)
-	a.stats.InputLength = 0
-	a.stats.InputRecords = 0
+	maps.Clear(a.metrics)
+	for _, val := range a.metadataStore {
+		val.Close()
+	}
+	maps.Clear(a.metadataStore)
 
 	log.Info().Println("Completed Flushing")
 	return nil
 }
 
-// Helper functions
-func createDimensionHash(dimensions map[string]string) string {
-	// Create a slice to hold the sorted key-value pairs
-	pairs := make([]string, 0, len(dimensions))
+// Using FNV hash - fastest approach
+func generateHash(dimensions map[string]string) uint64 {
+	// Create hash
+	h := fnv.New64a()
 
-	// Convert map entries to sorted slice
-	for k, v := range dimensions {
-		pairs = append(pairs, k+"="+v)
+	// Write sorted keys and values
+	for key, value := range dimensions {
+		h.Write([]byte(key))
+		h.Write([]byte(value))
 	}
 
-	// Sort the pairs to ensure consistent ordering
-	sort.Strings(pairs)
-
-	// Join all pairs with a delimiter
-	return strings.Join(pairs, ";")
+	return h.Sum64()
 }

@@ -1,4 +1,4 @@
-package histogram
+package metricaggregator
 
 import "math"
 
@@ -50,11 +50,11 @@ func (h *exponentialHistogram) GetBucketCount(bucket int) uint {
 }
 
 // GetNonEmptyBuckets returns a map of non-empty buckets and their counts
-func (h *exponentialHistogram) GetNonEmptyBuckets() []histogramBucket {
-	result := make([]histogramBucket, 0)
+func (h *exponentialHistogram) GetNonEmptyBuckets() []*histogramBucket {
+	result := make([]*histogramBucket, 0, len(h.buckets))
 	for bucket, count := range h.buckets {
 		if count > 0 {
-			result = append(result, histogramBucket{Value: h.ValueOf(bucket), Count: count})
+			result = append(result, &histogramBucket{Value: h.ValueOf(bucket), Count: count})
 		}
 	}
 	return result

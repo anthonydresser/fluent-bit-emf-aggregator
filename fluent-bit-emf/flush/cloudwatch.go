@@ -58,10 +58,7 @@ func init_cloudwatch_flush(groupName string, streamName string, endpoint string,
 	return flusher, nil
 }
 
-func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) (int, int, error) {
-	totalSize := 0
-	totalCount := 0
-
+func (f *cloudwatchFlusher) Flush(events []*common.EMFEvent) error {
 	// Create batches that respect CloudWatch Logs limits
 	currentBatch := make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
 	currentBatchSize := 0
@@ -69,7 +66,7 @@ func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) (int, int, error) {
 	for _, event := range events {
 		marshalled, err := json.Marshal(event)
 		if err != nil {
-			return totalSize, totalCount, fmt.Errorf("failed to marshal event: %v", err)
+			return fmt.Errorf("failed to marshal event: %v", err)
 		}
 
 		data := string(marshalled)
@@ -81,12 +78,10 @@ func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) (int, int, error) {
 
 		// If adding this event would exceed batch size, flush current batch
 		if (currentBatchSize+len(data)+perEventBytes) > maximumBytesPerPut || len(currentBatch) == maximumLogEventsPerPut {
-			size, err := f.send_cloudwatch_batch(currentBatch)
+			err := f.send_cloudwatch_batch(currentBatch)
 			if err != nil {
-				return totalSize, totalCount, err
+				return err
 			}
-			totalSize += size
-			totalCount += len(currentBatch)
 
 			// Reset batch
 			currentBatch = make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
@@ -104,21 +99,19 @@ func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) (int, int, error) {
 
 	// Send final batch if not empty
 	if len(currentBatch) > 0 {
-		size, err := f.send_cloudwatch_batch(currentBatch)
+		err := f.send_cloudwatch_batch(currentBatch)
 		if err != nil {
-			return totalSize, totalCount, err
+			return err
 		}
-		totalSize += size
-		totalCount += len(currentBatch)
 	}
 
-	return totalSize, totalCount, nil
+	return nil
 }
 
 // Helper function to send a batch of events
-func (f *cloudwatchFlusher) send_cloudwatch_batch(batch []types.InputLogEvent) (int, error) {
+func (f *cloudwatchFlusher) send_cloudwatch_batch(batch []types.InputLogEvent) error {
 	if len(batch) == 0 {
-		return 0, nil
+		return nil
 	}
 
 	_, err := f.cloudwatch_client.PutLogEvents(context.Background(), &cloudwatchlogs.PutLogEventsInput{
@@ -128,13 +121,8 @@ func (f *cloudwatchFlusher) send_cloudwatch_batch(batch []types.InputLogEvent) (
 	})
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to put log events: %v", err)
+		return fmt.Errorf("failed to put log events: %v", err)
 	}
 
-	batchSize := 0
-	for _, event := range batch {
-		batchSize += len(*event.Message)
-	}
-
-	return batchSize, nil
+	return nil
 }

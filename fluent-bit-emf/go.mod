@@ -6,6 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.27
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.36.0
 	github.com/fluent/fluent-bit-go v0.0.0-20230731091245-a7a013e2473c
+	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
 )
 
 require (

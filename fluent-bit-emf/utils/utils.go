@@ -16,8 +16,35 @@ func ConvertToFloat64(v interface{}) float64 {
 		return float64(v)
 	case int64:
 		return float64(v)
+	case uint:
+		return float64(v)
+	case uint64:
+		return float64(v)
 	case string:
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+// Helper function to convert interface{} to float64
+func ConvertToUint(v interface{}) uint64 {
+	switch v := v.(type) {
+	case float64:
+		return uint64(v)
+	case float32:
+		return uint64(v)
+	case int:
+		return uint64(v)
+	case int64:
+		return uint64(v)
+	case uint:
+		return uint64(v)
+	case uint64:
+		return v
+	case string:
+		if f, err := strconv.ParseUint(v, 10, 64); err == nil {
 			return f
 		}
 	}
@@ -68,4 +95,9 @@ func ToString(v interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+func ToPtr[T any](val T) *T {
+	value := val
+	return &value
 }
