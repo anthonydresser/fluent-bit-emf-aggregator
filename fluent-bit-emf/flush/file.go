@@ -37,7 +37,7 @@ func init_file_flush(outputPath string) (*fileFlusher, error) {
 	return flusher, nil
 }
 
-func (f *fileFlusher) Flush(events []common.EMFEvent) error {
+func (f *fileFlusher) Flush(events []*common.EMFEvent) error {
 	for _, event := range events {
 		if err := f.file_encoder.Encode(event); err != nil {
 			return fmt.Errorf("failed to write to file %s: %v", f.file.Name(), err)

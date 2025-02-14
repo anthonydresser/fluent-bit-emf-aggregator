@@ -2,9 +2,21 @@ package common
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
-	"strings"
+	"sync"
+
+	"golang.org/x/exp/maps"
+)
+
+var (
+	emfEventPool = sync.Pool{
+		New: func() any {
+			return &EMFEvent{
+				AWS:         &AWSMetadata{},
+				OtherFields: make(map[string]interface{}),
+			}
+		},
+	}
 )
 
 type EMFEvent struct {
@@ -12,20 +24,43 @@ type EMFEvent struct {
 	OtherFields map[string]interface{}
 }
 
+func GetEmfEventStruct() *EMFEvent {
+	return emfEventPool.Get().(*EMFEvent)
+}
+
+func (e *EMFEvent) Close() {
+	maps.Clear(e.OtherFields)
+	e.AWS.Close()
+	emfEventPool.Put(e)
+}
+
 type AWSMetadata struct {
-	Timestamp         int64                   `json:"Timestamp,omitempty"`
+	Timestamp         int64                   `json:"Timestamp"`
 	CloudWatchMetrics []*ProjectionDefinition `json:"CloudWatchMetrics"`
 }
 
-type MetricDefinition struct {
-	Name string `json:"Name"`
-	Unit string `json:"Unit,omitempty"`
+func (e *AWSMetadata) Close() {
+	for _, val := range e.CloudWatchMetrics {
+		val.close()
+	}
 }
 
-type ProjectionDefinition struct {
-	Namespace  string              `json:"Namespace"`
-	Dimensions [][]string          `json:"Dimensions"`
-	Metrics    []*MetricDefinition `json:"Metrics"`
+func (e *AWSMetadata) Resize(size int) {
+	if cap(e.CloudWatchMetrics) < size {
+		e.CloudWatchMetrics = make([]*ProjectionDefinition, size)
+	} else {
+		e.CloudWatchMetrics = e.CloudWatchMetrics[:size]
+	}
+}
+
+func (m *AWSMetadata) FillFrom(from *AWSMetadata) {
+	m.Timestamp = from.Timestamp
+	m.Resize(len(from.CloudWatchMetrics))
+	for i, val := range from.CloudWatchMetrics {
+		holder := GetProjectionStruct()
+		holder.FillFrom(val)
+		m.CloudWatchMetrics[i] = holder
+	}
 }
 
 func (e EMFEvent) MarshalJSON() ([]byte, error) {
@@ -36,43 +71,6 @@ func (e EMFEvent) MarshalJSON() ([]byte, error) {
 		output[k] = v
 	}
 	return json.Marshal(output)
-}
-
-func merge(old []*MetricDefinition, new []*MetricDefinition) {
-	for _, attempt := range new {
-		exists := false
-		for _, v := range old {
-			if v.Name == attempt.Name && v.Unit == attempt.Unit {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			old = append(old, attempt)
-		}
-	}
-}
-
-// we can only merge if the namespaces match and the dimension sets match
-// even if the namespaces match, if the dimensions aren't the same we risk
-// emitting metrics under dimensions they weren't intended to be emitted under
-func (def *ProjectionDefinition) attemptMerge(new *ProjectionDefinition) bool {
-	if def.Namespace != new.Namespace {
-		return false
-	}
-	// for now because of how we generate the hash we can skip this check
-	merge(def.Metrics, new.Metrics)
-	return true
-	// if utils.Every(def.Dimensions, func(val []string) bool {
-	// 	return utils.Find(new.Dimensions, func(test []string) bool {
-	// 		return strings.Join(val, ", ") == strings.Join(test, ", ")
-	// 	}) != -1
-	// }) {
-	// 	merge(def.Metrics, new.Metrics)
-	// 	return true
-	// } else {
-	// 	return false
-	// }
 }
 
 func (m *AWSMetadata) Merge(new *AWSMetadata) {
@@ -88,73 +86,4 @@ func (m *AWSMetadata) Merge(new *AWSMetadata) {
 			m.CloudWatchMetrics = append(m.CloudWatchMetrics, attempt)
 		}
 	}
-}
-
-type MetricValue struct {
-	Values []float64
-	Counts []uint
-	Min    float64
-	Max    float64
-	Sum    float64
-	Count  uint
-}
-
-func (m MetricValue) String() string {
-	var b strings.Builder
-	b.Grow(256) // Pre-allocate space
-	b.WriteString("{ ")
-
-	// Helper function to handle nil checks and formatting
-	addField := func(name string, value interface{}, isPointer bool) {
-		if b.Len() > 2 { // Add comma if not the first field
-			b.WriteString(", ")
-		}
-		b.WriteString(name + ": ")
-
-		if value == nil {
-			b.WriteString("nil")
-			return
-		}
-
-		if !isPointer {
-			// For non-pointer types (slices)
-			b.WriteString(fmt.Sprintf("%v", value))
-			return
-		}
-
-		// For pointer types, we need to check the concrete type
-		switch v := value.(type) {
-		case *float64:
-			if v == nil {
-				b.WriteString("nil")
-			} else {
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		case *int64:
-			if v == nil {
-				b.WriteString("nil")
-			} else {
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		case *uint:
-			if v == nil {
-				b.WriteString("nil")
-			} else {
-				b.WriteString(fmt.Sprintf("%v", *v))
-			}
-		default:
-			b.WriteString("nil")
-		}
-	}
-
-	// Add all fields using the helper function
-	addField("Values", m.Values, false)
-	addField("Counts", m.Counts, false)
-	addField("Min", m.Min, true)
-	addField("Max", m.Max, true)
-	addField("Sum", m.Sum, true)
-	addField("Count", m.Count, true)
-
-	b.WriteString(" }")
-	return b.String()
 }

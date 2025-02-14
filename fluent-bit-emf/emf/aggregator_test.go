@@ -13,24 +13,28 @@ import (
 func TestAggregator(t *testing.T) {
 	aggregator, _ := createTestAggregator(time.Second * 60)
 	data := createTestRecord(5, 5)
+	emf := common.GetEmfStruct()
+
 	// Create EMF metric directly from record
-	emf, err := EmfFromRecord(data)
+	err := FillEmfFromRecord(data, emf)
 
 	if err != nil {
 		log.Error().Printf("failed to process EMF record: %v\n", err)
+		emf.Close()
 	}
 
 	// Aggregate the metric
 	aggregator.AggregateMetric(emf)
+	emf.Close()
 }
 
 // Mock flusher for testing
 type mockFlusher struct {
 	flushCount int
-	events     []common.EMFEvent
+	events     []*common.EMFEvent
 }
 
-func (m *mockFlusher) Flush(events []common.EMFEvent) error {
+func (m *mockFlusher) Flush(events []*common.EMFEvent) error {
 	m.flushCount++
 	m.events = events
 	return nil
@@ -123,14 +127,19 @@ func BenchmarkEMFAggregator(b *testing.B) {
 
 			// Run the benchmark
 			for i := 0; i < b.N; i++ {
-				records := make([]*EMFMetric, 0, 60)
+				records := make([]*common.EMFReport, 0, 60)
 				for _, datum := range data {
 
+					emf := common.GetEmfStruct()
+
 					// Create EMF metric directly from record
-					emf, err := EmfFromRecord(datum)
+					err := FillEmfFromRecord(datum, emf)
+
+					records = append(records, emf)
 
 					if err != nil {
 						log.Error().Printf("failed to process EMF record: %v\n", err)
+						emf.Close()
 						continue
 					}
 
@@ -139,6 +148,7 @@ func BenchmarkEMFAggregator(b *testing.B) {
 				for _, record := range records {
 					// Aggregate the metric
 					aggregator.AggregateMetric(record)
+					record.Close()
 				}
 
 				// Force flush
@@ -159,14 +169,19 @@ func BenchmarkEMFAggregatorMemory(b *testing.B) {
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			records := make([]*EMFMetric, 0, 60)
+			records := make([]*common.EMFReport, 0, 60)
 			for _, datum := range data {
 
+				emf := common.GetEmfStruct()
+
 				// Create EMF metric directly from record
-				emf, err := EmfFromRecord(datum)
+				err := FillEmfFromRecord(datum, emf)
+
+				records = append(records, emf)
 
 				if err != nil {
 					log.Error().Printf("failed to process EMF record: %v\n", err)
+					emf.Close()
 					continue
 				}
 
@@ -176,6 +191,7 @@ func BenchmarkEMFAggregatorMemory(b *testing.B) {
 			for _, record := range records {
 				// Aggregate the metric
 				aggregator.AggregateMetric(record)
+				record.Close()
 			}
 		}
 	})

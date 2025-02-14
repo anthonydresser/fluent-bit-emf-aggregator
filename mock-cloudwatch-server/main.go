@@ -150,7 +150,7 @@ func validateEvent(event map[string]interface{}) error {
 			return fmt.Errorf("invalid _aws field: %v", err)
 		}
 	} else {
-		return fmt.Errorf("invalid _aws field: %v", err)
+		return fmt.Errorf("invalid _aws field: %v, %v", err, event["_aws"])
 	}
 
 	for _, cloudwatchMetric := range awsMetadata.CloudWatchMetrics {
@@ -165,17 +165,17 @@ func validateEvent(event map[string]interface{}) error {
 	}
 
 	if len(expectedMetrics) == 0 {
-		return fmt.Errorf("no metrics found")
+		return fmt.Errorf("no metrics found %v", event)
 	}
 
 	for key := range expectedMetrics {
 		if _, exists := event[key]; !exists {
-			return fmt.Errorf("missing metric %s", key)
+			return fmt.Errorf("missing metric %s in %v", key, event)
 		}
 	}
 	for key := range expectedDimensions {
 		if _, exists := event[key]; !exists {
-			return fmt.Errorf("missing dimension %s", key)
+			return fmt.Errorf("missing dimension %s in %v", key, event)
 		}
 	}
 	return nil

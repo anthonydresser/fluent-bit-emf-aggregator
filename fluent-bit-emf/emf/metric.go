@@ -9,19 +9,8 @@ import (
 	"github.com/anthonydresser/fluent-bit-emf-aggregator/fluent-bit-emf/utils"
 )
 
-type EMFMetric struct {
-	AWS        *common.AWSMetadata            `json:"_aws"`
-	Dimensions map[string]string              `json:"-"`
-	MetricData map[string]*common.MetricValue `json:"-"`
-}
-
 // EMF structures remain the same, but we'll add a new constructor
-func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
-	emf := &EMFMetric{
-		MetricData: make(map[string]*common.MetricValue),
-		Dimensions: make(map[string]string),
-	}
-
+func FillEmfFromRecord(record map[interface{}]interface{}, emf *common.EMFReport) error {
 	dimensionSet := make(map[string]struct{})
 	metricSet := make(map[string]struct{})
 
@@ -29,28 +18,26 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 	var ok bool
 
 	if awsData, ok = record["_aws"].(map[interface{}]interface{}); !ok {
-		return nil, fmt.Errorf("aws metadata did not exist or not expected form")
+		return fmt.Errorf("aws metadata did not exist or not expected form")
 	}
-
-	aws := &common.AWSMetadata{}
 
 	// Handle Timestamp
 	if ts, exists := awsData["Timestamp"]; !exists {
-		return nil, fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
+		return fmt.Errorf("no timestamp was found in aws data; likely means malformed record")
 	} else {
 		switch v := ts.(type) {
 		case int64:
-			aws.Timestamp = v
+			emf.AWS.Timestamp = v
 		case int:
-			aws.Timestamp = int64(v)
+			emf.AWS.Timestamp = int64(v)
 		case uint:
-			aws.Timestamp = int64(v)
+			emf.AWS.Timestamp = int64(v)
 		case uint32:
-			aws.Timestamp = int64(v)
+			emf.AWS.Timestamp = int64(v)
 		case uint64:
-			aws.Timestamp = int64(v)
+			emf.AWS.Timestamp = int64(v)
 		default:
-			return nil, fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
+			return fmt.Errorf("timestamp was not int, int64, uint, uint32, or uint64; was %v", reflect.TypeOf(v))
 		}
 	}
 
@@ -69,14 +56,14 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 
 	cwArray := awsData["CloudWatchMetrics"].([]interface{})
 
-	aws.CloudWatchMetrics = make([]*common.ProjectionDefinition, len(cwArray))
+	emf.AWS.Resize(len(cwArray))
 	for i, metricDef = range cwArray {
-		def := common.ProjectionDefinition{}
+		def := common.GetProjectionStruct()
 		md = metricDef.(map[interface{}]interface{})
 		def.Namespace = utils.ToString(md["Namespace"])
 		dimArray = md["Dimensions"].([]interface{})
 
-		def.Dimensions = make([][]string, len(dimArray))
+		def.ResizeDimensions(len(dimArray))
 		for j, dim = range dimArray {
 			dimSet = dim.([]interface{})
 			dimStrings := make([]string, len(dimSet))
@@ -90,7 +77,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 		}
 
 		metricsArray = md["Metrics"].([]interface{})
-		def.Metrics = make([]*common.MetricDefinition, len(metricsArray))
+		def.ResizeMetrics(len(metricsArray))
 
 		for j, metric = range metricsArray {
 			metricDef := common.MetricDefinition{}
@@ -103,9 +90,8 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 			metricSet[name] = struct{}{}
 		}
 
-		aws.CloudWatchMetrics[i] = &def
+		emf.AWS.CloudWatchMetrics[i] = def
 	}
-	emf.AWS = aws
 
 	for key, value := range record {
 		strKey := utils.ToString(key)
@@ -122,7 +108,7 @@ func EmfFromRecord(record map[interface{}]interface{}) (*EMFMetric, error) {
 		}
 	}
 
-	return emf, nil
+	return nil
 }
 
 func parseMetricValue(value interface{}) *common.MetricValue {

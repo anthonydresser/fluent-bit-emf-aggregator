@@ -58,7 +58,7 @@ func init_cloudwatch_flush(groupName string, streamName string, endpoint string,
 	return flusher, nil
 }
 
-func (f *cloudwatchFlusher) Flush(events []common.EMFEvent) error {
+func (f *cloudwatchFlusher) Flush(events []*common.EMFEvent) error {
 	// Create batches that respect CloudWatch Logs limits
 	currentBatch := make([]types.InputLogEvent, 0, maximumLogEventsPerPut)
 	currentBatchSize := 0
